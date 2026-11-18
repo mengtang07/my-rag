@@ -193,7 +193,7 @@ test-verbose:
 	uv run --package api pytest -v
 
 test-unit:
-	uv run --package api pytest apps/api/test/unit packages/rag-core/test/unit
+	uv run --package api pytest apps/api/test/unit packages/src/test/unit
 
 test-integration:
 	uv run --package api pytest apps/api/test/integration
@@ -226,7 +226,7 @@ test-cov-html:
 .PHONY: typecheck
 
 typecheck:
-	uv run --package api mypy apps/api/app packages/rag-core/src
+	uv run --package api mypy apps/api/app packages/src/rag-core
 
 # ---------- 冒烟 ----------
 

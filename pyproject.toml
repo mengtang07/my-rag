@@ -34,8 +34,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 asyncio_default_test_loop_scope = "function"
 # app 包按源码目录导入，不依赖 editable 安装的路径推断
-pythonpath = ["apps/api", "packages/rag-core/src"]
-testpaths = ["apps/api/test", "packages/rag-core/test"]
+pythonpath = ["apps/api", "packages/src/rag-core"]
+testpaths = ["apps/api/test", "packages/src/test"]
 markers = [
     "smoke: 标记为冒烟测试，验证核心流程是否正常",
     "postgres: 需要真实 PostgreSQL 的集成测试（不可用时自动跳过，make test-pg 时失败）",

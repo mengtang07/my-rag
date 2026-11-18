@@ -1,7 +1,8 @@
 """配置管理
 
-按模块划分前缀：通用 / WEB_ / DB_ / MILVUS_ / LLM_ / RAG_ / LOG_。
-钉钉的配置独立在 `config/dingding_setting.py`。
+按模块划分前缀：通用 / WEB_ / DB_ / RAG_ / LOG_。
+Milvus、LiteLLM 网关、钉钉各自独立在 `config/milvus_setting.py`、
+`config/llm_setting.py`、`config/dingding_setting.py`。
 每个前缀一个配置类，模块级暴露单例，调用方 `from config import db_settings`。
 
 环境变量文件统一放在仓库最外层：`.env`
@@ -14,7 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 本包所在目录（config/）
 CONFIG_DIR: Path = Path(__file__).resolve().parent
-# 仓库根目录（config/ → src/ → rag-core/ → packages/ → 仓库根）
+# 仓库根目录（config/ → rag-core/ → src/ → packages/ → 仓库根）
 PROJECT_ROOT: Path = CONFIG_DIR.parents[3]
 
 
@@ -82,40 +83,6 @@ class _DBSettings(_BaseSettingsWithEnv):
     model_config = SettingsConfigDict(env_file=ENV_FILE, env_prefix="DB_", extra="ignore")
 
 
-# ---------- Milvus ----------
-class _MilvusSettings(_BaseSettingsWithEnv):
-    """Milvus 向量库配置"""
-
-    uri: str = "http://localhost:19530"
-    collection: str = "rag_chunks"
-    # 必须与网关 embedding 模型的实际维度一致，否则插不进去
-    embed_dim: int = 1024
-    search_ef: int = 64
-    batch_size: int = 500
-    timeout: int = 30
-    token: str = ""
-
-    model_config = SettingsConfigDict(env_file=ENV_FILE, env_prefix="MILVUS_", extra="ignore")
-
-
-# ---------- LiteLLM 网关 ----------
-class _LLMSettings(_BaseSettingsWithEnv):
-    """LiteLLM 网关配置（对话 / 向量化 / 重排都走它）"""
-
-    api_base: str = "http://localhost:4000"
-    api_key: str = ""
-    chat_model: str = "chat-standard"
-    embed_model: str = "text-embedding"
-    rerank_model: str = "rerank"
-    embed_batch_size: int = 32
-    timeout: int = 60
-    temperature: float = 0.2
-    max_tokens: int = 1024
-    context_window: int = 32000
-
-    model_config = SettingsConfigDict(env_file=ENV_FILE, env_prefix="LLM_", extra="ignore")
-
-
 # ---------- 检索增强 ----------
 class _RAGSettings(_BaseSettingsWithEnv):
     """切块与检索参数"""
@@ -144,7 +111,5 @@ class _LogSettings(_BaseSettingsWithEnv):
 common_settings = _CommonSettings()
 web_settings = _WebSettings()
 db_settings = _DBSettings()
-milvus_settings = _MilvusSettings()
-llm_settings = _LLMSettings()
 rag_settings = _RAGSettings()
 log_settings = _LogSettings()

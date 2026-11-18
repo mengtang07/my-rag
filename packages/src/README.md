@@ -2,20 +2,21 @@
 
 my-rag 的共享发行包：**纯 RAG 领域逻辑**，不依赖 FastAPI / SQLAlchemy / litellm。
 
-一个发行包里带两个 import 包：
+一个发行包里带三个 import 包：
 
 ```
-src/
+rag-core/
 ├── rag_core/     # RAG 领域逻辑
 │   ├── models.py     #   Block / ParsedDocument / ChunkDraft
 │   ├── parsing/      #   markdown / pdf / docx / html / txt 解析
 │   ├── chunking/     #   结构感知切块
 │   └── text/         #   CJK 感知的 token 估算
-└── dingding/     # 钉钉知识库接入（独立 import 包）
-    ├── client.py     #   开放平台接口的异步客户端
-    ├── models.py     #   树结构模型（DingNode / DingBlock / …）
-    ├── tree.py       #   树构建：节点解析、标题树、遍历
-    └── exceptions.py #   DingTalkError
+├── dingding/     # 钉钉知识库接入（独立 import 包）
+│   ├── client.py     #   开放平台接口的异步客户端
+│   ├── models.py     #   树结构模型（DingNode / DingBlock / …）
+│   ├── tree.py       #   树构建：节点解析、标题树、遍历
+│   └── exceptions.py #   DingTalkError
+└── config/       # 配置（pydantic-settings 配置类与单例）
 ```
 
 ## 设计要点

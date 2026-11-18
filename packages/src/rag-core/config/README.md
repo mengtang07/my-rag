@@ -4,7 +4,9 @@
 
 ```
 config/
-├── settings.py         # 通用 / Web / 数据库 / Milvus / LLM / RAG / 日志配置
+├── settings.py         # 通用 / Web / 数据库 / RAG / 日志配置
+├── milvus_setting.py   # Milvus 向量库配置
+├── llm_setting.py      # LiteLLM 网关配置
 ├── dingding_setting.py # 钉钉开放平台配置
 └── README.md           # 本文件
 ```

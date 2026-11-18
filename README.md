@@ -71,8 +71,8 @@ my-rag/
 │           ├── hooks/        #   useDocuments / useChat
 │           └── types/api.ts  #   与后端 schema 对应的类型
 └── packages/
-    └── rag-core/             # 共享发行包（带三个 import 包）
-        ├── src/
+    └── src/                  # 共享发行包（带三个 import 包）
+        ├── rag-core/
         │   ├── rag_core/
         │   │   ├── models.py     #   Block / ParsedDocument / ChunkDraft
         │   │   ├── parsing/      #   markdown / pdf / docx / html / txt 解析
@@ -84,7 +84,9 @@ my-rag/
         │   │   ├── tree.py       #     树构建：节点解析、标题树、遍历
         │   │   └── exceptions.py #     DingTalkError
         │   └── config/           #   配置
-        │       ├── settings.py   #    通用 / Web / DB / Milvus / LLM / RAG / 日志
+        │       ├── settings.py   #    通用 / Web / DB / RAG / 日志
+        │       ├── milvus_setting.py # Milvus 向量库
+        │       ├── llm_setting.py    # LiteLLM 网关
         │       ├── dingding_setting.py # 钉钉开放平台
         │       └── README.md     #     每个变量的说明
         └── test/unit/
@@ -260,11 +262,13 @@ data: {"conversation_id":7,"message_id":19}
 
 ## 配置
 
-配置相关的都在 `packages/rag-core/src/config/` 里：
+配置相关的都在 `packages/src/rag-core/config/` 里：
 
 ```
-packages/rag-core/src/config/
-├── settings.py         # 通用 / Web / DB / Milvus / LLM / RAG / 日志配置
+packages/src/rag-core/config/
+├── settings.py         # 通用 / Web / DB / RAG / 日志配置
+├── milvus_setting.py   # Milvus 向量库配置
+├── llm_setting.py      # LiteLLM 网关配置
 ├── dingding_setting.py # 钉钉开放平台配置
 └── README.md           # 每个变量的说明（完整表格在这）
 ```
@@ -293,7 +297,7 @@ from config import db_settings, llm_settings   # 用法
 | `LOG_` | 日志级别 | `log_settings` |
 
 > `LLM_API_KEY` 所在的根目录 `.env` 已被 gitignore，不会进版本库。
-> 全部配置项见 [`config/README.md`](packages/rag-core/src/config/README.md)。
+> 全部配置项见 [`config/README.md`](packages/src/rag-core/config/README.md)。
 
 ## 测试
 

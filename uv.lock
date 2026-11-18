@@ -229,7 +229,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = "==2.9.13" },
     { name = "pydantic-settings", specifier = "==2.16.3" },
     { name = "pymilvus", specifier = "==3.0.3" },
-    { name = "rag-core", editable = "packages/rag-core" },
+    { name = "rag-core", editable = "packages/src" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = "==2.0.50" },
     { name = "sse-starlette", specifier = "==3.7.0" },
 ]
@@ -2337,7 +2337,7 @@ wheels = [
 [[package]]
 name = "rag-core"
 version = "0.1.0"
-source = { editable = "packages/rag-core" }
+source = { editable = "packages/src" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "httpx" },
