@@ -126,7 +126,7 @@ milvus-drop:
 
 # ---------- 知识库 ----------
 
-.PHONY: ingest ingest-dir reindex reindex-all search dingtalk-workspaces dingtalk-tree dingtalk-pull
+.PHONY: ingest ingest-dir reindex reindex-all search dingtalk-check dingtalk-workspaces dingtalk-unionid dingtalk-tree dingtalk-pull
 
 # 摄入单个文件：make ingest file=docs/部署手册.md
 ingest:
@@ -150,9 +150,17 @@ search:
 
 # ---------- 钉钉知识库 ----------
 
+# 体检整条凭证链：鉴权 → 列知识库 → 读根节点
+dingtalk-check:
+	uv run --package api python -m app.cli dingtalk check
+
 # 列出可见的钉钉知识库
 dingtalk-workspaces:
 	uv run --package api python -m app.cli dingtalk workspaces
+
+# 由 userId 查 unionId：make dingtalk-unionid userid=xxx
+dingtalk-unionid:
+	uv run --package api python -m app.cli dingtalk unionid "$(userid)"
 
 # 打印钉钉知识库的目录树
 dingtalk-tree:

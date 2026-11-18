@@ -24,6 +24,9 @@ import httpx
 from app.exception.dingtalk import DingTalkException
 
 DEFAULT_BASE_URL: str = "https://api.dingtalk.com"
+# 旧版接口的域名。查 unionId 走的是老接口（gettoken + topapi），
+# 跟新版的 accessToken 是两套东西，别混用。
+OAPI_BASE_URL: str = "https://oapi.dingtalk.com"
 TOKEN_HEADER: str = "x-acs-dingtalk-access-token"
 # 提前 5 分钟过期，避免边界上拿到一个刚失效的 token
 TOKEN_SKEW: float = 300.0
@@ -155,6 +158,87 @@ class DingTalkClient:
         self._token = token
         self._token_expire_at = time.time() + max(0.0, expire_in - TOKEN_SKEW)
         return token
+
+    # ---------- 身份 ----------
+
+    async def legacy_access_token(self) -> str:
+        """旧版 access_token（`gettoken`）—— 查 unionId 用"""
+        try:
+            response = await self._http().get(
+                f"{OAPI_BASE_URL}/gettoken",
+                params={"appkey": self.app_key, "appsecret": self.app_secret},
+                timeout=self.timeout,
+            )
+        except httpx.HTTPError as exc:
+            raise DingTalkException(
+                message=f"钉钉鉴权请求失败：{exc}",
+                detail="GET /gettoken",
+                original_exception=exc,
+            ) from exc
+
+        if response.status_code >= 400:
+            raise DingTalkException(
+                message=f"钉钉鉴权返回 HTTP {response.status_code}",
+                detail=response.text[:500],
+            )
+
+        payload = response.json()
+        token = str(payload.get("access_token") or "")
+        if not token:
+            raise DingTalkException(
+                message="钉钉鉴权失败：没拿到 access_token",
+                detail=response.text[:500],
+            )
+        return token
+
+    async def get_union_id(self, user_id: str) -> str:
+        """由 userId 查 unionId
+
+        `operatorId` 要的是 unionId，但钉钉的查询接口入参给的是 userId，
+        中间得转一次。走的是旧版 `gettoken` + `topapi/v2/user/get`。
+
+        ⚠️ 返回字段是 `result.unionid`（**没有下划线**），
+        `result.union_id` 在部分组织里是空的 —— 别取错。
+
+        Args:
+            user_id: 组织内的 userId
+
+        Returns:
+            unionId
+        """
+        token = await self.legacy_access_token()
+
+        try:
+            response = await self._http().post(
+                f"{OAPI_BASE_URL}/topapi/v2/user/get",
+                params={"access_token": token},
+                json={"userid": user_id, "language": "zh_CN"},
+                timeout=self.timeout,
+            )
+        except httpx.HTTPError as exc:
+            raise DingTalkException(
+                message=f"查询用户详情失败：{exc}",
+                detail=f"userid={user_id}",
+                original_exception=exc,
+            ) from exc
+
+        payload = response.json()
+        if payload.get("errcode"):
+            raise DingTalkException(
+                message=(
+                    f"查询用户详情失败：{payload.get('errmsg')} "
+                    f"({payload.get('errcode')})"
+                ).strip(),
+                detail=response.text[:500],
+            )
+
+        result = payload.get("result") or {}
+        union_id = str(result.get("unionid") or result.get("union_id") or "")
+        if not union_id:
+            raise DingTalkException(
+                message=f"没查到 userId={user_id} 对应的 unionId"
+            )
+        return union_id
 
     # ---------- 知识库 ----------
 

@@ -333,12 +333,52 @@ DINGTALK_OPERATOR_ID=   # 用户的 unionId
 DINGTALK_WORKSPACE_ID=  # 留空则取第一个可见的知识库
 ```
 
+### 怎么拿到这些值
+
+**1. 建应用** — https://open-dev.dingtalk.com/ → 应用开发 → 企业内部应用 → 创建应用
+> 若提示「暂无权限」，说明账号还不是开发者：OA 管理后台 → 设置 → 权限管理 → 管理组 → 给你加「开发者」权限。
+
+**2. 拿凭证** — 应用 → 凭证与基础信息 → AppKey / AppSecret
+
+**3. 申请权限** — 应用 → 权限管理 → 按英文 Scope 名搜索开通（发布后生效）：
+
+| Scope | 干什么 |
+| --- | --- |
+| `Wiki.Node.Read` | 读知识库节点（目录树） |
+| `Storage.File.Read` | 读文档正文（blocks） |
+| `qyapi_get_member` | 成员信息读权限（查 unionId 用） |
+
+**4. 发布** — 版本管理与发布 → 创建版本 → 发布
+
+**5. 可见范围** — 把你自己加进「应用可见范围」。接口是以 `operatorId` 那个人的身份读的，
+他看不到的知识库你也拉不到。
+
+**6. 查 unionId** — `operatorId` 要的是 unionId，但钉钉查询接口的入参给的是 userId：
+
+```shell
+make dingtalk-unionid userid=你的userId
+```
+
+userId 从 OA 后台的成员列表能看到。返回字段是 `result.unionid`（**没有下划线**），
+`result.union_id` 在部分组织里是空的 —— 这是个高频坑，客户端里已经处理了。
+
 ### 命令
 
 ```shell
+make dingtalk-check                             # 体检整条凭证链（鉴权→列库→读根节点）
+make dingtalk-unionid userid=xxx                # userId → unionId
 make dingtalk-workspaces                        # 列出知识库
 make dingtalk-tree                              # 打印目录树
 make dingtalk-pull out=tmp/dingtalk.json        # 拉整个知识库（目录树 + 正文）成 JSON
+```
+
+`dingtalk-check` 是排障用的一次性体检，能直接看出卡在哪一环：
+
+```
+1) 鉴权 … ✓
+2) 列知识库 … ✓ 2 个
+   知识库：团队知识库（ws-1）
+3) 读根节点 … ✓ 8 个
 ```
 
 ## 已知限制与后续可做

@@ -239,6 +239,63 @@ async def test_missing_credentials_raise() -> None:
         await client.access_token()
 
 
+# ---------- unionId 转换 ----------
+
+
+def _user_handler(request: httpx.Request) -> httpx.Response:
+    """旧版接口的打桩"""
+    if request.url.path == "/gettoken":
+        return httpx.Response(
+            200, json={"access_token": "old-token", "expires_in": 7200}
+        )
+    if request.url.path == "/topapi/v2/user/get":
+        return httpx.Response(
+            200,
+            json={
+                "errcode": 0,
+                "result": {"unionid": "union-xyz", "name": "张三"},
+            },
+        )
+    return httpx.Response(404)
+
+
+async def test_get_union_id_reads_result_unionid() -> None:
+    """unionId 取的是 result.unionid（没有下划线）"""
+    client, _ = _make_client(_user_handler)
+    assert await client.get_union_id("user-1") == "union-xyz"
+    await client.close()
+
+
+async def test_get_union_id_reports_errcode() -> None:
+    """errcode 不为 0 时报出来"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/gettoken":
+            return httpx.Response(200, json={"access_token": "old", "expires_in": 7200})
+        return httpx.Response(
+            200, json={"errcode": 40002, "errmsg": "不合法的userid"}
+        )
+
+    client, _ = _make_client(handler)
+    with pytest.raises(DingTalkException, match="不合法的userid"):
+        await client.get_union_id("bad-id")
+    await client.close()
+
+
+async def test_get_union_id_when_field_missing() -> None:
+    """返回里没有 unionId 时也报错（而不是静默返回空串）"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/gettoken":
+            return httpx.Response(200, json={"access_token": "old", "expires_in": 7200})
+        return httpx.Response(200, json={"errcode": 0, "result": {"union_id": ""}})
+
+    client, _ = _make_client(handler)
+    with pytest.raises(DingTalkException, match="unionId"):
+        await client.get_union_id("user-1")
+    await client.close()
+
+
 # ---------- 节点解析 ----------
 
 

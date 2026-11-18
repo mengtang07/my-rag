@@ -210,6 +210,51 @@ def _build_dingtalk_client() -> DingTalkClient:
     )
 
 
+async def _dingtalk_unionid(user_id: str) -> None:
+    """由 userId 查 unionId"""
+    client = _build_dingtalk_client()
+    try:
+        union_id = await client.get_union_id(user_id)
+    finally:
+        await client.close()
+
+    print(f"userId {user_id} → unionId {union_id}")
+    print("把它填到 .env 的 DINGTALK_OPERATOR_ID")
+
+
+async def _dingtalk_check() -> None:
+    """体检整条凭证链：能不能鉴权 → 有没有知识库 → 能不能读节点"""
+    client = _build_dingtalk_client()
+    try:
+        print("1) 鉴权 …", end=" ", flush=True)
+        await client.access_token()
+        print("✓")
+
+        print("2) 列知识库 …", end=" ", flush=True)
+        workspaces = await client.list_workspaces()
+        print(f"✓ {len(workspaces)} 个")
+
+        if not workspaces:
+            print("   没有可见的知识库：检查「应用可见范围」里有没有你")
+            return
+
+        workspace = workspaces[0]
+        root_node_id = str(workspace.get("rootNodeId") or "")
+        print(f"   知识库：{workspace.get('name')}（{workspace.get('workspaceId')}）")
+
+        if not root_node_id:
+            print("   ⚠️ 没拿到 rootNodeId，没法往下拉目录树")
+            return
+
+        print("3) 读根节点 …", end=" ", flush=True)
+        nodes = await client.list_nodes(root_node_id)
+        print(f"✓ {len(nodes)} 个")
+        for node in nodes[:10]:
+            print(f"     {node.get('name')}  ({node.get('type')})")
+    finally:
+        await client.close()
+
+
 def main() -> None:
     """命令行入口"""
     parser = argparse.ArgumentParser(prog="app.cli", description="my-rag 命令行")
@@ -229,7 +274,10 @@ def main() -> None:
 
     dingtalk_parser = subparsers.add_parser("dingtalk", help="钉钉知识库")
     dingtalk_sub = dingtalk_parser.add_subparsers(dest="action", required=True)
+    dingtalk_sub.add_parser("check", help="体检整条凭证链")
     dingtalk_sub.add_parser("workspaces", help="列出知识库")
+    unionid_parser = dingtalk_sub.add_parser("unionid", help="由 userId 查 unionId")
+    unionid_parser.add_argument("userid", help="组织内的 userId")
     tree_parser = dingtalk_sub.add_parser("tree", help="打印目录树")
     tree_parser.add_argument("--workspace", help="知识库 id")
     pull_parser = dingtalk_sub.add_parser("pull", help="拉整个知识库（目录树 + 正文）")
@@ -274,8 +322,12 @@ def main() -> None:
 
     if args.command == "dingtalk":
         workspace = getattr(args, "workspace", None) or dingtalk_settings.workspace_id
-        if args.action == "workspaces":
+        if args.action == "check":
+            asyncio.run(_dingtalk_check())
+        elif args.action == "workspaces":
             asyncio.run(_dingtalk_workspaces())
+        elif args.action == "unionid":
+            asyncio.run(_dingtalk_unionid(args.userid))
         elif args.action == "tree":
             asyncio.run(_dingtalk_tree(workspace))
         elif args.action == "pull":
