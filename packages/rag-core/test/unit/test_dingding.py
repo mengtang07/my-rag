@@ -545,3 +545,49 @@ async def test_get_my_union_id_when_field_missing() -> None:
     with pytest.raises(DingTalkError, match="unionId"):
         await client.get_my_union_id()
     await client.close()
+
+
+# ---------- 部门成员 → unionId ----------
+
+
+def _department_handler(request: httpx.Request) -> httpx.Response:
+    """列成员 + 换 unionId 的打桩"""
+    if request.url.path == "/gettoken":
+        return httpx.Response(200, json={"access_token": "old", "expires_in": 7200})
+    if request.url.path == "/topapi/v2/user/list":
+        return httpx.Response(
+            200,
+            json={
+                "errcode": 0,
+                "result": [
+                    {"userid": "u-1", "name": "张三"},
+                    {"userid": "u-2", "name": "李四"},
+                ],
+            },
+        )
+    if request.url.path == "/topapi/v2/user/get":
+        user_id = request.content.decode().split('"')[3]
+        if user_id == "u-2":
+            return httpx.Response(200, json={"errcode": 40002, "errmsg": "查不到"})
+        return httpx.Response(
+            200, json={"errcode": 0, "result": {"unionid": f"union-{user_id}"}}
+        )
+    return httpx.Response(404)
+
+
+async def test_list_department_users() -> None:
+    """列部门成员"""
+    client, _ = _make_client(_department_handler)
+    members = await client.list_department_users(1)
+
+    assert [member["name"] for member in members] == ["张三", "李四"]
+    await client.close()
+
+
+async def test_resolve_union_ids_skips_failures() -> None:
+    """批量换 unionId，查不到的跳过而不是整体失败"""
+    client, _ = _make_client(_department_handler)
+    resolved = await client.resolve_union_ids(["u-1", "u-2"])
+
+    assert resolved == {"u-1": "union-u-1"}
+    await client.close()

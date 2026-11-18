@@ -296,6 +296,78 @@ class DingTalkClient:
             )
         return union_id
 
+    async def list_department_users(
+        self,
+        department_id: int = 1,
+        *,
+        size: int = 50,
+    ) -> list[dict[str, Any]]:
+        """列出部门下的成员（用来在组织里找到自己）
+
+        需要 `qyapi_get_department_member` 权限。部门 1 是根部门，
+        通常涵盖整个组织。
+
+        Args:
+            department_id: 部门 id，1 = 根部门
+            size: 每页条数
+
+        Returns:
+            成员列表，每项含 `userid` / `name` / `department` 等
+        """
+        token = await self.legacy_access_token()
+
+        try:
+            response = await self._http().get(
+                f"{OAPI_BASE_URL}/topapi/v2/user/list",
+                params={
+                    "access_token": token,
+                    "department_id": department_id,
+                    "size": size,
+                },
+                timeout=self.timeout,
+            )
+        except httpx.HTTPError as exc:
+            raise DingTalkError(
+                message=f"列部门成员失败：{exc}",
+                detail=f"department_id={department_id}",
+                original_exception=exc,
+            ) from exc
+
+        payload = response.json()
+        if payload.get("errcode"):
+            raise DingTalkError(
+                message=(
+                    f"列部门成员失败：{payload.get('errmsg')} "
+                    f"({payload.get('errcode')})"
+                ).strip(),
+                detail=response.text[:500],
+            )
+
+        result = payload.get("result")
+        return result if isinstance(result, list) else []
+
+    async def resolve_union_ids(self, user_ids: list[str]) -> dict[str, str]:
+        """批量把 userId 换成 unionId
+
+        需要 `qyapi_get_member` 权限。
+
+        Args:
+            user_ids: 待转换的 userId 列表
+
+        Returns:
+            `{userId: unionId}`（查不到的不会出现在结果里）
+        """
+        result: dict[str, str] = {}
+
+        for user_id in user_ids:
+            try:
+                union_id = await self.get_union_id(user_id)
+            except DingTalkError:
+                continue
+            result[user_id] = union_id
+
+        return result
+
     # ---------- 知识库 ----------
 
     async def list_workspaces(self) -> list[dict[str, Any]]:

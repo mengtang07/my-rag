@@ -222,6 +222,37 @@ async def _dingtalk_unionid(user_id: str) -> None:
     print("把它填到 .env 的 DINGTALK_OPERATOR_ID")
 
 
+async def _dingtalk_users(department_id: int) -> None:
+    """列出部门成员（找到自己的 userId），并顺手把 unionId 也换出来"""
+    client = _build_dingtalk_client()
+    try:
+        members = await client.list_department_users(department_id)
+        if not members:
+            print("这个部门下没有成员")
+            return
+
+        print(f"部门 {department_id} 共有 {len(members)} 名成员：\n")
+        for member in members:
+            print(f"  {member.get('name', '(未命名)')}  userId={member.get('userid')}")
+
+        print("\n正在换 unionId …", end=" ", flush=True)
+        resolved = await client.resolve_union_ids(
+            [str(member.get("userid")) for member in members if member.get("userid")]
+        )
+        print("✓" if resolved else "✗")
+
+        if resolved:
+            print()
+            for member in members:
+                user_id = str(member.get("userid") or "")
+                union_id = resolved.get(user_id)
+                if union_id:
+                    print(f"  {member.get('name')} → unionId {union_id}")
+            print("\n找到自己那一行，把 unionId 填到 .env 的 DINGTALK_OPERATOR_ID")
+    finally:
+        await client.close()
+
+
 async def _dingtalk_unionid_me() -> None:
     """查当前授权用户自己的 unionId（不需要先知道 userId）"""
     client = _build_dingtalk_client()
@@ -239,7 +270,8 @@ DINGTALK_SCOPES: tuple[tuple[str, str, bool], ...] = (
     ("Wiki.Workspace.Read", "列出知识库", True),
     ("Wiki.Node.Read", "读知识库节点（目录树）", True),
     ("Storage.File.Read", "读文档正文（blocks）", True),
-    ("Contact.User.Read", "查 unionId（没配 operatorId 时才需要）", False),
+    ("qyapi_get_department_member", "列部门成员（用来在组织里找到自己）", False),
+    ("qyapi_get_member", "成员信息读权限（userId → unionId）", False),
 )
 
 
@@ -314,6 +346,10 @@ def main() -> None:
     unionid_parser = dingtalk_sub.add_parser("unionid", help="由 userId 查 unionId")
     unionid_parser.add_argument("userid", help="组织内的 userId")
     dingtalk_sub.add_parser("unionid-me", help="查当前授权用户自己的 unionId")
+    users_parser = dingtalk_sub.add_parser("users", help="列部门成员（找自己的 userId）")
+    users_parser.add_argument(
+        "--dept", type=int, default=1, help="部门 id，1 = 根部门（默认）"
+    )
     tree_parser = dingtalk_sub.add_parser("tree", help="打印目录树")
     tree_parser.add_argument("--workspace", help="知识库 id")
     pull_parser = dingtalk_sub.add_parser("pull", help="拉整个知识库（目录树 + 正文）")
@@ -368,6 +404,8 @@ def main() -> None:
             asyncio.run(_dingtalk_unionid(args.userid))
         elif args.action == "unionid-me":
             asyncio.run(_dingtalk_unionid_me())
+        elif args.action == "users":
+            asyncio.run(_dingtalk_users(args.dept))
         elif args.action == "tree":
             asyncio.run(_dingtalk_tree(workspace))
         elif args.action == "pull":
