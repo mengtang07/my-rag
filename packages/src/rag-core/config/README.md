@@ -4,7 +4,10 @@
 
 ```
 config/
-├── settings.py         # 通用 / Web / 数据库 / RAG / 日志配置
+├── base_setting.py     # 配置基类与环境变量文件定位
+├── settings.py         # 通用 / 数据库 / RAG 配置
+├── web_setting.py      # Web 服务与跨域配置
+├── log_setting.py      # 日志配置
 ├── milvus_setting.py   # Milvus 向量库配置
 ├── llm_setting.py      # LiteLLM 网关配置
 ├── dingding_setting.py # 钉钉开放平台配置

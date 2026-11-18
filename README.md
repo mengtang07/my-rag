@@ -84,7 +84,10 @@ my-rag/
         │   │   ├── tree.py       #     树构建：节点解析、标题树、遍历
         │   │   └── exceptions.py #     DingTalkError
         │   └── config/           #   配置
-        │       ├── settings.py   #    通用 / Web / DB / RAG / 日志
+        │       ├── base_setting.py   # 配置基类与环境变量定位
+        │       ├── settings.py       # 通用 / DB / RAG
+        │       ├── web_setting.py    # Web 服务
+        │       ├── log_setting.py    # 日志
         │       ├── milvus_setting.py # Milvus 向量库
         │       ├── llm_setting.py    # LiteLLM 网关
         │       ├── dingding_setting.py # 钉钉开放平台
@@ -266,7 +269,10 @@ data: {"conversation_id":7,"message_id":19}
 
 ```
 packages/src/rag-core/config/
-├── settings.py         # 通用 / Web / DB / RAG / 日志配置
+├── base_setting.py     # 配置基类与环境变量文件定位
+├── settings.py         # 通用 / DB / RAG 配置
+├── web_setting.py      # Web 服务与跨域配置
+├── log_setting.py      # 日志配置
 ├── milvus_setting.py   # Milvus 向量库配置
 ├── llm_setting.py      # LiteLLM 网关配置
 ├── dingding_setting.py # 钉钉开放平台配置

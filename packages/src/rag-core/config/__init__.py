@@ -2,7 +2,10 @@
 
 配置相关的都在这个包里：
 
-- `settings.py` —— 通用 / Web / 数据库 / RAG / 日志配置
+- `base_setting.py` —— 配置基类与环境变量文件定位
+- `settings.py` —— 通用 / 数据库 / RAG 配置
+- `web_setting.py` —— Web 服务配置
+- `log_setting.py` —— 日志配置
 - `milvus_setting.py` —— Milvus 向量库配置
 - `llm_setting.py` —— LiteLLM 网关配置
 - `dingding_setting.py` —— 钉钉开放平台配置
@@ -14,17 +17,17 @@
 用法：`from config import db_settings, llm_settings, dingtalk_settings`
 """
 
+from config.base_setting import ENV_FILE
 from config.dingding_setting import dingtalk_settings
 from config.llm_setting import llm_settings
+from config.log_setting import log_settings
 from config.milvus_setting import milvus_settings
 from config.settings import (
-    ENV_FILE,
     common_settings,
     db_settings,
-    log_settings,
     rag_settings,
-    web_settings,
 )
+from config.web_setting import web_settings
 
 __all__ = [
     "ENV_FILE",

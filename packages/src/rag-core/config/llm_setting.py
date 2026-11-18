@@ -2,7 +2,7 @@
 
 from pydantic_settings import SettingsConfigDict
 
-from config.settings import ENV_FILE, _BaseSettingsWithEnv
+from config.base_setting import ENV_FILE, _BaseSettingsWithEnv
 
 
 class _LLMSettings(_BaseSettingsWithEnv):
