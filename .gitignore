@@ -1,0 +1,25 @@
+# 虚拟环境
+.venv/
+
+# 环境变量
+.env
+
+# 缓存
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# 测试覆盖率
+.coverage
+htmlcov/
+
+# 日志
+tmp/
+
+# 数据库
+*.db
+
+# IDE
+.idea/
+.DS_Store

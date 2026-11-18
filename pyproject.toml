@@ -1,0 +1,53 @@
+[project]
+name = "duyi-service"
+version = "0.1.0"
+description = "渡一 Python 全栈框架：FastAPI 服务骨架"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+    "apps/*",
+    "packages/*",
+]
+
+[dependency-groups]
+dev = [
+    "aiosqlite==0.21.0",
+    "debugpy==1.8.21",
+    "httpx==0.28.1",
+    "mypy==2.1.0",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov==7.0.0",
+    "python-dotenv==1.2.2",
+]
+
+[tool.pytest.ini_options]
+# auto 模式：pytest-asyncio 自动接管所有 `async def` 用例和异步夹具，
+# 而普通 `def` 用例仍由 pytest 原生同步执行 —— 同步、异步用例共用这一套配置
+asyncio_mode = "auto"
+# 显式声明事件循环作用域，不依赖库的默认值
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "function"
+# app 包按源码目录导入，不依赖 editable 安装的路径推断
+pythonpath = ["apps/web-service", "packages/duyi-utils/src"]
+testpaths = ["apps/web-service/test", "packages/duyi-utils/test"]
+markers = [
+    "smoke: 标记为冒烟测试，验证核心流程是否正常",
+    "postgres: 需要真实 PostgreSQL 的集成测试（不可用时自动跳过，make test-pg 时失败）",
+]
+
+[tool.test-runner]
+test_dirs = [
+    "apps/*/test",
+    "packages/*/test",
+]
+
+[tool.mypy]
+python_version = "3.14"
+warn_unused_configs = true
+ignore_missing_imports = true
+disallow_untyped_defs = true
+no_implicit_optional = true

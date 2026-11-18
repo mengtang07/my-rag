@@ -1,0 +1,29 @@
+数据库迁移脚本目录
+
+本目录由 Alembic 管理，数据库表结构的唯一来源是 `app/model` 下的 ORM 模型。
+
+常用命令（在 `my_fastapi` 目录或仓库根目录执行）：
+
+    make db-migrate message="描述"      # 根据模型变更自动生成迁移脚本
+    make db-upgrade                     # 执行迁移，升级到最新版本
+    make db-downgrade                   # 回滚一步
+    make db-downgrade version=8488462544a6   # 回滚到指定版本
+    make db-current                     # 查看数据库当前停留在哪个版本
+    make db-history                     # 查看全部迁移历史
+    make db-show version=ff82225ccb51   # 查看某个版本迁移脚本的内容
+    make db-check                       # 检查模型与数据库结构是否一致
+    make db-sql > migrate.sql           # 只生成 SQL 不执行（不连数据库）
+    make db-stamp version=ff82225ccb51  # 只改版本号，不执行迁移
+
+日常开发流程：
+
+    1. 改动模型（app/model/*.py）
+    2. make db-migrate message="描述"    # 生成迁移脚本
+    3. 审查生成的脚本（是否丢数据、回滚是否可逆）
+    4. make db-upgrade                   # 执行迁移
+
+注意事项：
+
+    - 迁移脚本一旦执行过就视为常量，不再修改或删除
+    - 迁移脚本报错时，修复脚本后重新执行即可
+    - 尽量少用回滚：回滚会让表结构和模型不一致
