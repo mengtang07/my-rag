@@ -1,120 +1,202 @@
-# Makefile
+# ---------- 基础 ----------
 
-.PHONY: sync dev debug test test-verbose test-unit test-integration test-pg \
-        test-e2e test-k test-file test-cov test-cov-html \
-        db-init db-reset db-migrate db-upgrade db-downgrade \
-        db-current db-history db-show db-check db-sql db-stamp
+.PHONY: sync dev debug help
 
-# 开发服务器端口：8080 被本机 Nacos 容器占用，默认改用 8088
-# 需要换端口时：make dev PORT=9001
+# 开发服务器端口：8080 被本机 Nacos 占用
 PORT ?= 8088
+# 前端开发服务器端口
+WEB_PORT ?= 5173
 
-# ---------- 环境 ----------
+help:
+	@echo "my-rag 可用命令："
+	@echo "  依赖：sync / dev / debug / web-install / dev-web / web-build"
+	@echo "  容器：docker-up / docker-down / docker-reset / docker-logs / docker-ps"
+	@echo "  数据库：db-init / db-reset / db-migrate / db-upgrade / db-current / db-check"
+	@echo "  向量库：milvus-init / milvus-status / milvus-reset"
+	@echo "  知识库：ingest / ingest-dir / reindex / reindex-all / search"
+	@echo "  测试：test / test-unit / test-integration / test-pg / test-milvus / test-e2e"
+	@echo "  其他：typecheck / smoke"
 
-# 安装依赖
 # 必须带 --all-packages：裸 `uv sync` 只同步根项目自身的依赖，
-# 会把 apps/web-service 的依赖（fastapi/alembic/...）当成多余包卸载掉
+# 会把 apps/api 的依赖（fastapi/alembic/...）当成多余包卸载掉
 sync:
 	uv sync --all-packages
 
-# ---------- 服务 ----------
-
-# 启动开发服务器（热重载），PORT=xxx 可指定端口
 dev:
-	export PYTHONDONTWRITEBYTECODE=1; \
-	uv run --package web-service fastapi dev apps/web-service/app/main.py --port $(PORT)
+	uv run --package api fastapi dev apps/api/app/main.py --port $(PORT)
 
-# 调试模式（等待 debugpy 连接）
 debug:
-	export PYTHONDONTWRITEBYTECODE=1; \
-	uv run --package web-service python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m fastapi dev apps/web-service/app/main.py --port 8000
+	uv run --package api python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m fastapi dev apps/api/app/main.py --port $(PORT)
+
+# ---------- 前端（独立的 pnpm 工程，不属于 uv workspace）----------
+
+.PHONY: web-install dev-web web-build web-preview
+
+web-install:
+	cd apps/web && pnpm install
+
+dev-web:
+	cd apps/web && pnpm dev --port $(WEB_PORT)
+
+web-build:
+	cd apps/web && pnpm build
+
+web-preview:
+	cd apps/web && pnpm preview --port $(WEB_PORT)
+
+# ---------- 容器（PostgreSQL + Milvus）----------
+
+.PHONY: docker-up docker-down docker-reset docker-logs docker-ps
+
+docker-up:
+	docker compose up -d
+
+docker-down:
+	docker compose down
+
+# 连数据卷一起清：Milvus 集合与 PG 数据都会消失
+docker-reset:
+	docker compose down -v
+	docker compose up -d
+
+docker-logs:
+	docker compose logs -f
+
+docker-ps:
+	docker compose ps
+
+# ---------- 数据库 ----------
+
+.PHONY: db-init db-reset db-migrate db-upgrade db-downgrade db-current db-history db-show db-check db-sql db-stamp
+
+db-init:
+	uv run --package api python apps/api/scripts/init_db.py
+
+# 重建数据库会重置 PG 序列 → chunk.id 会被复用 →
+# 必须连带 milvus-reset，否则 Milvus 里的旧向量会覆盖新向量
+db-reset:
+	uv run --package api python apps/api/scripts/init_db.py --drop
+	$(MAKE) milvus-reset
+
+db-migrate:
+	uv run --package api alembic -c apps/api/alembic.ini revision --autogenerate -m "$(message)"
+
+db-upgrade:
+	uv run --package api alembic -c apps/api/alembic.ini upgrade $(or $(version),head)
+
+db-downgrade:
+	uv run --package api alembic -c apps/api/alembic.ini downgrade $(or $(version),-1)
+
+db-current:
+	uv run --package api alembic -c apps/api/alembic.ini current
+
+db-history:
+	uv run --package api alembic -c apps/api/alembic.ini history
+
+db-show:
+	uv run --package api alembic -c apps/api/alembic.ini show $(version)
+
+db-check:
+	uv run --package api alembic -c apps/api/alembic.ini check
+
+db-sql:
+	uv run --package api alembic -c apps/api/alembic.ini upgrade $(or $(version),head) --sql
+
+db-stamp:
+	uv run --package api alembic -c apps/api/alembic.ini stamp $(version)
+
+# ---------- 向量库 ----------
+
+.PHONY: milvus-init milvus-status milvus-reset milvus-drop
+
+# 幂等：集合已存在时只校验维度并补建索引，不会报错
+milvus-init:
+	uv run --package api python apps/api/scripts/milvus_init.py
+
+milvus-status:
+	uv run --package api python apps/api/scripts/milvus_init.py --status
+
+# 删集合并按当前维度重建。PG 序列重置（db-reset）或换 embedding 模型后必须执行
+milvus-reset:
+	uv run --package api python apps/api/scripts/milvus_init.py --reset
+
+milvus-drop:
+	uv run --package api python apps/api/scripts/milvus_init.py --drop
+
+# ---------- 知识库 ----------
+
+.PHONY: ingest ingest-dir reindex reindex-all search
+
+# 摄入单个文件：make ingest file=docs/部署手册.md
+ingest:
+	uv run --package api python -m app.cli ingest "$(file)"
+
+# 摄入整个目录（递归）：make ingest-dir dir=docs
+ingest-dir:
+	uv run --package api python -m app.cli ingest --dir "$(dir)"
+
+# 重建单个文档的向量：make reindex doc=1
+reindex:
+	uv run --package api python -m app.cli reindex --doc "$(doc)"
+
+# 全量重建（换 embedding 模型后用）
+reindex-all:
+	uv run --package api python -m app.cli reindex --all
+
+# 命令行检索（不调用大模型）：make search query="怎么安装依赖"
+search:
+	uv run --package api python -m app.cli search "$(query)"
 
 # ---------- 测试 ----------
 
-# 运行全部测试（同步用例、异步用例一起跑）
+.PHONY: test test-verbose test-unit test-integration test-pg test-milvus test-e2e test-k test-file test-cov test-cov-html
+
 test:
-	uv run --package web-service pytest
+	uv run --package api pytest
 
-# 详细模式：逐条打印用例名
 test-verbose:
-	uv run --package web-service pytest -v
+	uv run --package api pytest -v
 
-# 只跑单元测试
 test-unit:
-	uv run --package web-service pytest apps/web-service/test/unit
+	uv run --package api pytest apps/api/test/unit packages/rag-core/test/unit
 
-# 只跑集成测试（PostgreSQL 用例连不上库会自动跳过）
 test-integration:
-	uv run --package web-service pytest apps/web-service/test/integration
+	uv run --package api pytest apps/api/test/integration
 
-# 只跑需要 PostgreSQL 的用例：连不上库直接失败，适合 CI
-# 测试库默认 tm_db_test，会在第一次运行时自动创建并执行迁移
+# 只跑需要 PostgreSQL 的用例；连不上库直接失败（CI 用）
 test-pg:
-	REQUIRE_PG=1 uv run --package web-service pytest -m postgres
+	REQUIRE_PG=1 uv run --package api pytest -m postgres
 
-# 只跑端到端测试：真实起一个服务进程，用 httpx 发真实 HTTP 请求
-# 需要 PostgreSQL（连不上会自动跳过）；测试库为 tm_db_e2e_test
+# 只跑需要 Milvus 的用例
+test-milvus:
+	REQUIRE_MILVUS=1 uv run --package api pytest -m milvus
+
 test-e2e:
-	uv run --package web-service pytest apps/web-service/test/e2e
+	uv run --package api pytest apps/api/test/e2e
 
-# 按关键字筛选用例：make test-k keyword=product
 test-k:
-	uv run --package web-service pytest -k "$(keyword)"
+	uv run --package api pytest -k "$(keyword)"
 
-# 跑单个文件：make test-file file=apps/web-service/test/unit/test_model_orm.py
 test-file:
-	uv run --package web-service pytest "$(file)"
+	uv run --package api pytest "$(file)"
 
-# 覆盖率报告（终端输出，缺失行一目了然）
 test-cov:
-	uv run --package web-service pytest --cov=app --cov-report=term-missing
+	uv run --package api pytest --cov=app --cov-report=term-missing
 
-# 覆盖率报告（HTML，输出到 htmlcov/）
 test-cov-html:
-	uv run --package web-service pytest --cov=app --cov-report=html
+	uv run --package api pytest --cov=app --cov-report=html
 
-# ---------- 数据库迁移（Alembic） ----------
+# ---------- 类型检查 ----------
 
-# 建库 + 跑迁移
-db-init:
-	uv run --package web-service python apps/web-service/scripts/init_db.py
+.PHONY: typecheck
 
-# 删库重建 + 跑迁移（会清空数据）
-db-reset:
-	uv run --package web-service python apps/web-service/scripts/init_db.py --drop
+typecheck:
+	uv run --package api mypy apps/api/app packages/rag-core/src
 
-# 生成迁移脚本
-db-migrate:
-	uv run --package web-service alembic -c apps/web-service/alembic.ini revision --autogenerate -m "$(message)"
+# ---------- 冒烟 ----------
 
-# 执行迁移，升级到最新版本；version=xxx 可升到指定版本
-db-upgrade:
-	uv run --package web-service alembic -c apps/web-service/alembic.ini upgrade $(or $(version),head)
+.PHONY: smoke
 
-# 回滚一步；version=xxx 可回滚到指定版本
-db-downgrade:
-	uv run --package web-service alembic -c apps/web-service/alembic.ini downgrade $(or $(version),-1)
-
-# 查看数据库当前停留在哪个迁移版本
-db-current:
-	uv run --package web-service alembic -c apps/web-service/alembic.ini current
-
-# 查看全部迁移历史
-db-history:
-	uv run --package web-service alembic -c apps/web-service/alembic.ini history
-
-# 查看某个迁移版本脚本的内容
-db-show:
-	uv run --package web-service alembic -c apps/web-service/alembic.ini show $(version)
-
-# 检查模型与数据库结构是否一致（改了模型忘了生成脚本时会报错）
-db-check:
-	uv run --package web-service alembic -c apps/web-service/alembic.ini check
-
-# 只生成 SQL 不执行（离线模式，不连数据库）
-db-sql:
-	uv run --package web-service alembic -c apps/web-service/alembic.ini upgrade $(or $(version),head) --sql
-
-# 只改版本号不执行迁移
-db-stamp:
-	uv run --package web-service alembic -c apps/web-service/alembic.ini stamp $(version)
+# 端到端冒烟：需要 docker-up 之后执行
+smoke:
+	uv run --package api python apps/api/scripts/smoke.py

@@ -1,293 +1,321 @@
-# 渡一 Python 全栈框架
+# my-rag：个人知识库 RAG 系统
 
-基于 `FastAPI` 的 Web 服务工程骨架，采用 `uv` workspace 管理，可直接用于新项目或作为课程配套工程。
+把一堆文档灌进去，用自然语言提问，拿到**带引用来源**的答案。
+
+- **后端**：FastAPI + PostgreSQL（文档元数据与正文）+ Milvus（向量）+ LiteLLM 网关（对话 / 向量化 / 重排）
+- **前端**：Vite + React 单页应用（文档管理 + 流式问答 + 来源面板）
+- **工具链**：uv workspace（Python）+ pnpm（前端）
 
 ## 目录结构
 
 ```
-my_fastapi/
-├── pyproject.toml              # workspace 根配置（依赖组、pytest、mypy）
-├── Makefile                    # 常用命令快捷入口
-├── .env.example                # 环境变量样例，复制为 .env 后生效
-├── .env.test.example           # 测试环境变量样例，复制为 .env.test 后生效
-├── .python-version             # 统一的 Python 版本
+my-rag/
+├── pyproject.toml            # uv workspace 根（依赖组、pytest、mypy）
+├── Makefile                  # 常用命令快捷入口
+├── docker-compose.yml        # PostgreSQL + Milvus（etcd + minio）
+├── README.md                 # 本文件
+├── .env.example              # 环境变量样例，复制为 .env 后生效
+├── .env.test.example         # 测试环境变量样例
+├── .python-version           # 统一的 Python 版本
+├── docker/
+│   ├── postgres/init/        # 首次初始化时执行的 SQL（pg_trgm 扩展）
+│   └── milvus-init/          # 一次性容器：幂等建集合 + 建索引 + 加载
 ├── apps/
-│   └── web-service/            # Web 服务应用
-│       ├── pyproject.toml
-│       ├── alembic.ini         # 数据库迁移配置
-│       ├── app/
-│       │   ├── main.py         # 应用入口：创建 app、注册中间件与异常处理器
-│       │   ├── api/            # 接口层：只做参数接收与结果返回
-│       │   │   ├── health.py   #   健康检查
-│       │   │   ├── products.py #   商品接口
-│       │   │   ├── categories.py
-│       │   │   ├── skus.py
-│       │   │   └── upload.py   #   文件上传接口（阿里云 OSS 直传）
-│       │   ├── schema/         # 数据校验层：pydantic 模型
-│       │   │   ├── product.py
-│       │   │   ├── category.py
-│       │   │   ├── sku.py
-│       │   │   └── upload.py   #   上传入参/出参
-│       │   ├── service/        # 业务逻辑层：真正的业务处理
-│       │   │   ├── base.py
-│       │   │   ├── product_service.py
-│       │   │   ├── category_service.py
-│       │   │   ├── sku_service.py
-│       │   │   └── upload_service.py #  上传凭证签发、文件查询与删除
-│       │   ├── model/          # ORM 层：SQLAlchemy 模型（表结构的唯一来源）
-│       │   │   ├── base.py     #   基类与 Mixin
-│       │   │   ├── category.py #   分类（与商品多对多）
-│       │   │   ├── product.py  #   商品 SPU（与 SKU 一对多）
-│       │   │   ├── sku.py      #   商品规格 SKU
-│       │   │   └── association/ #  多对多关联表（中间表）
-│       │   │       └── product_category.py
-│       │   ├── core/           # 基础设施层
-│       │   │   ├── config.py   #   配置管理（pydantic-settings）
-│       │   │   ├── database.py #   引擎与会话管理
-│       │   │   ├── openapi.py  #   OpenAPI 文档定制
-│       │   │   └── middleware/ #   中间件
-│       │   └── exception/      # 异常定义与统一异常处理器
-│       ├── migrations/         # Alembic 迁移脚本
-│       ├── scripts/            # 运维脚本
-│       │   └── init_db.py      #   初始化数据库（建库 + 跑迁移）
-│       └── test/               # 测试
-│           ├── unit/           #   单元测试（内存 SQLite，不依赖真实数据库）
-│           ├── integration/    #   集成测试（进程内，ASGI）
-│           └── e2e/            #   端到端测试（真实起服务进程）
+│   ├── api/                  # ---------- Python 后端（uv 成员） ----------
+│   │   ├── pyproject.toml  alembic.ini  README.md
+│   │   ├── app/
+│   │   │   ├── main.py       # 应用入口：创建 app、注册中间件与异常处理器
+│   │   │   ├── cli.py        # 命令行：ingest / reindex / search
+│   │   │   ├── api/          # 接口层：只做参数接收与结果返回
+│   │   │   │   ├── health.py #   健康检查 + 系统状态
+│   │   │   │   ├── documents.py # 文档上传/入库/列表/详情/切块/重建/删除
+│   │   │   │   ├── search.py #   纯向量检索（不调大模型）
+│   │   │   │   ├── chat.py  #   流式问答（SSE）与非流式问答
+│   │   │   │   └── conversations.py # 会话与消息
+│   │   │   ├── schema/       # 数据校验层：pydantic 模型
+│   │   │   ├── service/      # 业务逻辑层：真正的业务处理
+│   │   │   │   ├── base.py
+│   │   │   │   ├── document_service.py
+│   │   │   │   ├── ingest_service.py    # 解析→切块→向量化→落库→建索引
+│   │   │   │   ├── retrieval_service.py # 向量召回→回表→上下文组装
+│   │   │   │   ├── chat_service.py      # 提示词、token 预算、流式事件
+│   │   │   │   └── conversation_service.py
+│   │   │   ├── model/        # ORM 层：SQLAlchemy 模型（表结构的唯一来源）
+│   │   │   │   ├── base.py   #   基类与 Mixin
+│   │   │   │   ├── document.py
+│   │   │   │   ├── chunk.py
+│   │   │   │   ├── conversation.py
+│   │   │   │   └── message.py
+│   │   │   ├── core/         # 基础设施层
+│   │   │   │   ├── config.py #   配置管理（pydantic-settings）
+│   │   │   │   ├── database.py # 引擎与会话管理
+│   │   │   │   ├── llm.py    #   LiteLLM 网关客户端
+│   │   │   │   ├── milvus_schema.py # 集合 schema 与幂等建集合
+│   │   │   │   ├── vector_store.py  # Milvus 读写封装
+│   │   │   │   ├── openapi.py #  OpenAPI 文档定制
+│   │   │   │   ├── prompt.py #   系统提示词（必须字面稳定）
+│   │   │   │   └── middleware/ # 中间件
+│   │   │   └── exception/    # 异常定义与统一异常处理器
+│   │   ├── migrations/       # Alembic 迁移脚本
+│   │   ├── scripts/          # 运维脚本
+│   │   │   ├── init_db.py    #   初始化数据库（建库 + 跑迁移）
+│   │   │   ├── milvus_init.py #  建集合 / 查状态 / 重建
+│   │   │   └── smoke.py      #   端到端冒烟断言
+│   │   └── test/             # 测试
+│   │       ├── unit/         #   单元测试（零外部依赖）
+│   │       ├── integration/  #   集成测试（真 PG / 真 Milvus）
+│   │       └── e2e/          #   端到端测试（真实起服务进程）
+│   └── web/                  # ---------- 前端（pnpm，独立工具链） ----------
+│       ├── package.json  vite.config.ts  index.html
+│       └── src/
+│           ├── api/          #   请求封装与 SSE 客户端
+│           ├── components/   #   列表、上传、对话、消息、来源卡片
+│           ├── hooks/        #   useDocuments / useChat
+│           └── types/api.ts  #   与后端 schema 对应的类型
 └── packages/
-    └── duyi-utils/             # 共享包：阿里云 OSS 上传等通用能力
-        ├── pyproject.toml
-        ├── src/duyi_utils/
-        │   ├── shared/         #   文件后缀、MIME 等小工具
-        │   └── upload/         #   OSS 上传器、目录策略
-        └── test/               #   共享包自己的测试
+    └── rag-core/             # 共享包：纯 RAG 领域逻辑
+        ├── src/rag_core/
+        │   ├── models.py     #   Block / ParsedDocument / ChunkDraft
+        │   ├── parsing/      #   markdown / pdf / docx / html / txt 解析
+        │   ├── chunking/     #   结构感知切块
+        │   └── text/         #   CJK 感知的 token 估算
+        └── test/unit/
 ```
 
 ## 快速开始
 
-命令可以在 `my_fastapi` 目录下执行，也可以在仓库根目录执行（根目录的 Makefile 会自动转发）。
-
 ```shell
-# 1. 安装依赖
+# 1. 装依赖（Python 侧）
 make sync
 
-# 2. 准备配置
-cp my_fastapi/.env.example my_fastapi/.env
+# 2. 装前端依赖
+make web-install
 
-# 3. 初始化数据库（库不存在则创建，并执行迁移）
+# 3. 准备配置
+cp .env.example .env
+#    填 LLM_API_KEY（LiteLLM 网关的密钥）
+
+# 4. 起依赖容器（PostgreSQL + Milvus）
+make docker-up
+
+# 5. 建库 + 建集合
 make db-init
+make milvus-init
 
-# 4. 启动服务
-make dev
+# 6. 启动
+make dev          # 后端 http://localhost:8088
+make dev-web      # 前端 http://localhost:5173
 ```
 
-默认端口是 `8088`（本机 `8080` 已被 Nacos 占用），可以临时改端口：
+打开 http://localhost:5173 ，上传一份 markdown，然后提问。
+
+冒烟验证（需要 `make dev` 已经在跑）：
 
 ```shell
-make dev PORT=9001
+make smoke
 ```
-
-启动后访问：
-
-- http://localhost:8088/health —— 健康检查
-- http://localhost:8088/docs —— 接口文档
-- http://localhost:8088/redoc —— 接口文档（ReDoc）
 
 ## 常用命令
 
 | 命令 | 说明 |
 | --- | --- |
-| `make sync` | 安装依赖 |
-| `make dev` | 启动开发服务器（热重载），`PORT=xxx` 可指定端口 |
-| `make debug` | 调试模式（等待 debugpy 连接） |
-| `make test` | 运行全部测试（同步 + 异步用例） |
-| `make test-verbose` | 详细模式，逐条打印用例名 |
-| `make test-unit` | 运行单元测试 |
-| `make test-integration` | 运行集成测试（PostgreSQL 用例连不上库会自动跳过） |
-| `make test-pg` | 只跑需要 PostgreSQL 的用例；连不上库直接失败（CI 用） |
-| `make test-e2e` | 只跑端到端测试（真实起服务进程，用独立测试库） |
-| `make test-k keyword=product` | 按关键字筛选用例 |
-| `make test-file file=apps/web-service/test/unit/test_schema.py` | 只跑单个测试文件 |
-| `make test-cov` | 覆盖率报告（终端输出，缺失行一目了然） |
-| `make test-cov-html` | 覆盖率报告（HTML，输出到 `htmlcov/`） |
+| `make sync` | 安装 Python 依赖 |
+| `make dev` | 启动后端（热重载），`PORT=xxx` 可指定端口 |
+| `make dev-web` | 启动前端开发服务器（`/api` 代理到 8088） |
+| `make web-build` | 构建前端产物到 `apps/web/dist` |
+| `make docker-up` / `docker-down` | 起停 PostgreSQL + Milvus |
+| `make docker-reset` | 连数据卷一起清 |
+| `make db-init` / `db-reset` | 建库+迁移 / 删库重建 |
+| `make db-migrate message="描述"` | 根据模型变更生成迁移脚本 |
+| `make db-upgrade` / `db-downgrade` | 执行迁移 / 回滚一步 |
+| `make db-check` | 检查模型与数据库结构是否一致 |
+| `make milvus-init` | 幂等建集合 + 建索引 + 加载 |
+| `make milvus-status` | 查看集合维度与向量条数 |
+| `make milvus-reset` | 删集合并按当前维度重建 |
+| `make ingest file=docs/a.md` | 摄入单个文件 |
+| `make ingest-dir dir=docs` | 摄入整个目录（递归） |
+| `make reindex doc=1` | 重建单个文档的向量 |
+| `make reindex-all` | 全量重建（换 embedding 模型后用） |
+| `make search query="怎么装"` | 命令行检索（不调大模型） |
+| `make test` / `test-unit` / `test-integration` | 运行测试 |
+| `make test-pg` / `test-milvus` | 需要真实 PG / Milvus，缺依赖则失败（CI 用） |
+| `make test-e2e` | 端到端测试（真实起服务进程） |
+| `make typecheck` | mypy 检查 |
+| `make smoke` | 端到端冒烟断言 |
 
-### 测试
+## 架构
 
-测试配置写在 `pyproject.toml` 的 `[tool.pytest.ini_options]`：
+### 存储分工
 
-```toml
-asyncio_mode = "auto"
-```
-
-`auto` 模式下，`pytest-asyncio` 自动接管所有 `async def` 用例和异步夹具，
-而普通 `def` 用例仍由 pytest 原生同步执行 —— **同步、异步用例共用这一套配置**，
-写同步用例不需要任何额外标注，写异步用例也不需要手写 `@pytest.mark.asyncio`。
-
-| 目录 | 用途 | 例子 |
+| 数据 | 存在哪 | 为什么 |
 | --- | --- | --- |
-| `test/unit/` | 单元测试，屏蔽外部依赖 | `test_schema.py`（纯同步）、`test_model_orm.py`（异步 + 内存 SQLite）、`test_upload_service.py`（假 uploader，不联网） |
-| `test/integration/` | 集成测试，多模块协作 | `test_api_health.py`（内存 SQLite）、`test_api_upload.py`（内存 SQLite）、`test_api_postgres.py`（真实 PostgreSQL） |
-| `test/e2e/` | 端到端测试，真实起服务进程 | 起独立进程跑 `fastapi dev`，用 httpx 发真实 HTTP 请求 |
+| 文档元数据（标题、状态、sha256…） | PostgreSQL `document` 表 | 需要事务、唯一约束、分页 |
+| **切块正文** | PostgreSQL `chunk` 表 | **唯一真相源**，检索命中后回表取 |
+| 会话与消息 | PostgreSQL `conversation` / `message` 表 | 同上 |
+| 向量 | Milvus `rag_chunks` 集合 | 专门做向量检索，支持 HNSW |
 
-#### 两种数据库夹具
+Milvus 集合里**只有向量和主键**，没有正文：
 
-**内存 SQLite（默认，零依赖）**
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `pk` | INT64 主键 | = PostgreSQL 里 `chunk.id` |
+| `vector` | FLOAT_VECTOR(1024) | 稠密向量 |
+| `doc_id` | INT64 | = `document.id`，按文档过滤/删除用 |
+| `chunk_index` | INT64 | 文档内序号 |
 
-大部分用例走 `test/conftest.py` 里的 `db_session` 夹具 —— 内存 SQLite + `aiosqlite`，
-表结构由 `create_all` 现建，不连真实数据库，跑一次几毫秒：
-跑测试前**不需要**执行 `make db-init`，也不需要本机装 PostgreSQL。
+索引：HNSW + 余弦距离（`M=16`、`efConstruction=200`），查询 `ef=64`。
 
-测试配置在导入应用之前就被固定（`ENVIRONMENT=test`、`WEB_CORS_*` 等），
-不受本机 `.env` 影响；数据库名还会被强制改写成 `tm_db_test`，
-即使有代码绕过夹具直接调用 `get_db`，也连接不到开发库。
+### 一致性边界
 
-**真实 PostgreSQL（`postgres` 标记）**
+**PostgreSQL 是真相源，Milvus 是可随时重建的派生索引。**
 
-迁移脚本、数据库级约束/级联、`server_default`、JSON 字段这些 SQLite 测不了的内容，
-放在 `test/integration/` 下并标上 `postgres`，夹具见 `test/integration/conftest.py`：
+写入顺序固定为 **PG 先 → Milvus 后 → PG 状态最后**：
 
-- 使用独立测试库，默认 `tm_db_test`（可用 `TEST_DB_NAME` 覆盖，必须以 `_test` 结尾）；
-- 库不存在会自动创建，并执行 `alembic upgrade head`，不需要手动准备；
-- 每个用例跑在事务里，结束后回滚，用例之间互不影响；
-- 连不上 PostgreSQL 时自动跳过，`make test` 在没有数据库的机器上仍能全绿；
-  加 `REQUIRE_PG=1`（即 `make test-pg`）则改为失败，避免 CI 静默跳过。
+1. 插入 `document`（status=`parsing`）并提交
+2. 解析 → 切块 → 插入 `chunk` 行，status 改为 `indexing`，提交
+3. 批量向量化 → 写入 Milvus
+4. status 改为 `ready`，提交
 
-迁移测试在一次性数据库上执行 `upgrade head` / `alembic check` / `downgrade base`，
-结束后删除该库，不会碰开发库 `tm_db`。
+反过来（先写 Milvus）会产生没法对齐的孤儿向量；先写 PG 的失败态则是**可恢复**的 ——
+重跑 `make reindex doc=<id>` 只需要第 3、4 步。
 
-### 数据库迁移
+删除顺序相反：**先删 Milvus 再删 PG**。PG 删成功而 Milvus 删失败只是留下孤儿向量（可清理）；
+PG 有正文但向量没了会让检索直接漏召回，更糟。
 
-| 命令 | 说明 |
-| --- | --- |
-| `make db-init` | 初始化数据库：库不存在则创建，并执行迁移 |
-| `make db-reset` | 重建数据库：先删库再建库并迁移（会清空数据） |
-| `make db-migrate message="add user table"` | 根据模型变更生成迁移脚本 |
-| `make db-upgrade` | 执行迁移，升级到最新版本；`version=xxx` 可升到指定版本 |
-| `make db-downgrade` | 回滚一步；`version=xxx` 可回滚到指定版本 |
-| `make db-current` | 查看数据库当前停留在哪个迁移版本 |
-| `make db-history` | 查看全部迁移历史 |
-| `make db-show version=xxx` | 查看某个迁移版本脚本的内容 |
-| `make db-check` | 检查模型与数据库结构是否一致（改了模型忘了生成脚本时会报错） |
-| `make db-sql > migrate.sql` | 只生成 SQL 不执行（离线模式，不连数据库） |
-| `make db-stamp version=xxx` | 只把数据库标记为某个版本，不执行迁移 |
+> ⚠️ `make db-reset` 会重置 PG 序列，`chunk.id` 会被复用 → **必须连带 `make milvus-reset`**，
+> 否则 Milvus 里的旧向量会覆盖新向量。Makefile 里已经成对执行了。
 
-日常开发流程：**改模型 → `make db-migrate` → 审查脚本 → `make db-upgrade`**。
+### 切块策略
 
-迁移脚本本身也有测试覆盖：`make test-pg` 会在一次性数据库上执行
-`upgrade head`、`alembic check`（模型与迁移不一致会失败）、`downgrade base`
-往返，并检查模型里的 `server_default` 是否真的落到了数据库上。
+**结构感知为主、定长兜底**，而不是纯定长窗口：
 
-## 框架约定
+1. 解析器先按标题层级把文档切成「带标题路径的区块」
+   （markdown / docx / html 能还原标题树；PDF 没结构，退化成按页切）
+2. 区块正文过长时按 段落 → 句子 → 硬切 三级降到 `RAG_CHUNK_MAX_CHARS`
+3. 同一区块内的相邻片段保留 `RAG_CHUNK_OVERLAP` 字符重叠（跨标题不重叠，否则语义会串）
+4. 过短的片段并入同标题路径下的前一片段（跨标题不合并，引用出处会失真）
+5. 入库正文前面拼上 `## 标题路径`，**前缀参与向量化** —— 检索「依赖安装」时更容易命中对应章节
 
-### 分层
+定长窗口会把标题和它下面的正文切开、拦腰截断表格，结果是命中块语义不完整、引用对不上原文结构。
+
+### 检索与生成
 
 ```
-api → service → model → database
+问题 → 向量化 → Milvus top_k×2 → 回表取正文 → (可选重排) → 组装上下文 → 大模型 → 流式吐字 + 引用
 ```
 
-- `api`：只负责接收参数、调用 `service`、返回结果，不写业务逻辑
-- `service`：业务逻辑的唯一归属地，操作数据库会话
-- `model`：ORM 模型，表结构的唯一定义来源
-- `schema`：出入参的校验规则，与模型解耦
+- 上下文按分数降序累加，超 `RAG_MAX_CONTEXT_TOKENS` 就停（至少保留一条）
+- 历史消息按 token 预算从最旧开始丢
+- 系统提示词固定在 `app/core/prompt.py`，**字面必须稳定**（将来挂 prompt cache 的前提）
 
-### 数据库迁移
+## 接口一览
 
-表结构定义在 `model`，表结构变更记录在 `migrations`，两者必须始终一致：
-
-- 建表只走迁移：`make db-init` / `make db-upgrade`，**不要在代码里调 `create_all`**（它绕过版本管理，会让迁移状态和真实表结构对不上）
-- 改完模型必须 `make db-migrate message="描述"` 生成迁移脚本，审查后再 `make db-upgrade` 执行
-- 迁移脚本一旦执行过就视为常量，不再修改或删除
-- `make db-check` 可随时校验模型与数据库结构是否一致
-- 测试用的内存 SQLite 不受此约束，夹具自行建表
-
-### 统一响应
-
-所有 `/api/` 开头的接口，响应体统一为：
+所有 `/api/` 开头且返回 JSON 的接口，响应体统一为：
 
 ```json
-{
-  "code": "0",
-  "data": {},
-  "message": "success"
-}
+{ "code": "0", "data": {}, "message": "success" }
 ```
 
-`code` 为 `0` 表示成功，非 `0` 为业务错误码（详见 `/docs` 中的错误码说明）。
+`code` 为 `0` 表示成功，非 `0` 为业务错误码。`/health` 刻意不带 `/api/` 前缀，不参与封装。
 
-### 统一异常
-
-在业务代码中直接抛出业务异常即可，无需自己拼装响应：
-
-```python
-from app.exception import NotFoundException
-
-raise NotFoundException(message="商品不存在")
-```
-
-全局异常处理器会把它转换成 `404` + 业务错误码 `404001`。
-
-### 文件上传（阿里云 OSS）
-
-采用**前端直传**模式：应用只签发 OSS 的 PostObject 上传凭证，文件由浏览器直接发到
-OSS，不经过应用服务器，因此不受应用带宽限制。
-
-底层实现在共享包 `packages/duyi-utils`（`AliyunOSSUploader`），
-应用侧只做配置翻译和异常翻译：`app/service/upload_service.py`。
-
-| 接口 | 说明 |
-| --- | --- |
-| `POST /api/upload/credentials` | 申请上传凭证，入参 `{"filename": "photo.png", "file_size": 1024}` |
-| `GET /api/upload/object/{key}` | 查询文件是否存在 |
-| `DELETE /api/upload/object/{key}` | 删除文件 |
-
-凭证字段：`host`（POST 目标地址）、`access_id`、`policy`、`signature`、`key`、
-`content_type`。前端拿到后用 `multipart/form-data` 直接 POST 到 `host`，
-表单字段依次为 `OSSAccessKeyId` / `policy` / `signature` / `key` / `Content-Type`，
-文件本身放在 `file` 字段里。
-
-```javascript
-const { host, access_id, policy, signature, key, content_type } = cred;
-const form = new FormData();
-form.append("OSSAccessKeyId", access_id);
-form.append("policy", policy);
-form.append("signature", signature);
-form.append("key", key);
-form.append("Content-Type", content_type);
-form.append("file", file);
-await fetch(host, { method: "POST", body: form });
-```
-
-`policy` 里锁死了 `key`、`Content-Type` 和文件大小范围（`content-length-range`），
-拿到的凭证换 key、换类型或超大小上传都会被 OSS 拒绝。
-
-配置项（`.env`）：
-
-| 变量 | 说明 |
-| --- | --- |
-| `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` | 访问密钥 |
-| `OSS_BUCKET_NAME` / `OSS_ENDPOINT` | Bucket 与地域 Endpoint |
-| `OSS_EXPIRE_SECONDS` | 凭证有效期，默认 3600 秒 |
-| `OSS_MIME_TYPES` | 允许上传的 MIME 类型，逗号分隔；留空不限制 |
-| `OSS_DIR_STRATEGY` | `date`（`uploads/YYYY/MM/DD/`）或 `flat`（`uploads/`） |
-
-配置缺失时接口返回业务错误码 `422002`（而不是 500），提示缺哪个配置项。
-
-### 配置
-
-配置集中在 `app/core/config.py`，按模块划分前缀：
-
-| 前缀 | 配置类 | 说明 |
+| 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| 无 | `CommonSettings` | 环境标识 |
-| `WEB_` | `WebSettings` | 应用名、接口前缀、跨域 |
-| `DB_` | `DBSettings` | 数据库连接 |
-| `OSS_` | `OSSSettings` | 阿里云 OSS（文件上传） |
-| `LOG_` | `LogSettings` | 日志级别 |
+| GET | `/health` | 存活探针 |
+| GET | `/api/system/status` | 三个依赖的就绪状态（含集合维度对照） |
+| POST | `/api/documents` | 上传文件并入库（幂等） |
+| POST | `/api/documents/text` | 直接提交文本入库 |
+| GET | `/api/documents` | 文档分页列表 |
+| GET | `/api/documents/{id}` | 文档详情 |
+| GET | `/api/documents/{id}/chunks` | 查看切块 |
+| POST | `/api/documents/{id}/reindex` | 重建该文档向量 |
+| DELETE | `/api/documents/{id}` | 删除文档（连带删向量） |
+| POST | `/api/search` | 纯向量检索，不调大模型 |
+| POST | `/api/chat/stream` | **SSE 流式问答** |
+| POST | `/api/chat/complete` | 非流式问答 |
+| GET/POST/DELETE | `/api/conversations[...]` | 会话与消息 |
 
-### 类型标注
+SSE 事件顺序：`sources`（先推引用，界面立刻能显示）→ `token`（增量文本）→ `done`。
 
-所有代码必须带类型标注，`mypy` 检查：
+```text
+event: sources
+data: {"citations":[{"index":1,"chunk_id":42,"document_title":"部署手册","heading_path":"安装 > 依赖","score":0.82}]}
 
-```shell
-uv run mypy apps/web-service/app
+event: token
+data: {"text":"先安装 "}
+
+event: done
+data: {"conversation_id":7,"message_id":19}
 ```
+
+> SSE 端点**豁免**统一响应封装（`app/core/middleware/response.py` 里的 `EXEMPT_PATHS`）——
+> 它有自己的一套事件协议，被包一层就废了。
+
+## 配置
+
+| 前缀 | 变量 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| — | `ENVIRONMENT` | development | 生产环境关 `/docs` |
+| WEB_ | `WEB_APP_NAME` / `WEB_CORS_*` | — | 应用名与跨域 |
+| DB_ | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | localhost / **5433** / rag_db / admin / 123123 | 连接串手工拼接，没有 `DATABASE_URL` |
+| MILVUS_ | `MILVUS_URI` | http://localhost:19530 | |
+| | `MILVUS_COLLECTION` | rag_chunks | |
+| | `MILVUS_EMBED_DIM` | **1024** | 必须与网关 embedding 模型一致 |
+| | `MILVUS_SEARCH_EF` / `MILVUS_BATCH_SIZE` / `MILVUS_TIMEOUT` | 64 / 500 / 30 | |
+| LLM_ | `LLM_API_BASE` | http://localhost:4000 | LiteLLM 网关地址 |
+| | `LLM_API_KEY` | — | 网关密钥 |
+| | `LLM_CHAT_MODEL` / `LLM_EMBED_MODEL` / `LLM_RERANK_MODEL` | chat-standard / text-embedding / rerank | 网关侧的模型别名 |
+| | `LLM_EMBED_BATCH_SIZE` / `LLM_TIMEOUT` / `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` / `LLM_CONTEXT_WINDOW` | 32 / 60 / 0.2 / 1024 / 32000 | |
+| RAG_ | `RAG_CHUNK_MAX_CHARS` / `RAG_CHUNK_MIN_CHARS` / `RAG_CHUNK_OVERLAP` | 1200 / 80 / 150 | 切块 |
+| | `RAG_TOP_K` / `RAG_MAX_CONTEXT_TOKENS` / `RAG_HISTORY_TURNS` / `RAG_MAX_FILE_MB` | 5 / 6000 / 6 / 20 | 检索与上下文 |
+| | `RAG_USE_RERANK` | false | 是否走网关重排 |
+| LOG_ | `LOG_LEVEL` | INFO | |
+
+> `LLM_API_KEY` 所在的 `.env` 已被 gitignore，不会进版本库。
+
+## 测试
+
+| 目录 | 依赖 | 覆盖 |
+| --- | --- | --- |
+| `test/unit/` | 无 | 切块边界、各格式解析、token 估算、schema 校验、LLM 异常映射、**模型注册表断言** |
+| `test/integration/` | 内存 SQLite + 假 LLM/向量库 | 文档全链路、统一信封、SSE 帧顺序、会话落库 |
+| | 真实 PostgreSQL（`postgres` 标记） | 迁移往返（upgrade/check/downgrade）、约束、pg_trgm |
+| | 真实 Milvus（`milvus` 标记） | 建集合幂等性、向量写入检索往返、按文档删除 |
+| `test/e2e/` | 真起服务进程 + 真 PG + 真 Milvus + 真网关 | 上传 → 落库 → 列表可见 → 检索命中 → 删除 → 列表为空 |
+
+依赖不可用时自动跳过，`make test-pg` / `make test-milvus` 会改为失败（CI 用，避免静默跳过）。
+
+**e2e 里那条「列表可见」是回归防线**：框架的老版本 `get_db()` 从不提交事务，
+写接口的数据实际会回滚 —— 而进程内的集成测试全程用同一个内存 session，
+根本看不出这个问题，只有真起进程 + 真数据库才暴露得出来。
+
+## 已知限制与后续可做
+
+- **只做稠密单路检索**。精确词/编号/专有名词的召回目前靠 embedding 的语义能力，
+  精确匹配偏弱。数据都在 PostgreSQL 里，加 `pg_trgm` 索引后按 RRF 合并关键词召回
+  与向量召回是下一步 —— **不需要改 Milvus schema，也不需要重建向量**。
+- **PDF 没有结构**。PDF 一般没有标题层级，退化成「按页 + 段落切分」，引用里给页码。
+- **系统提示词固定**。想做 prompt cache 就把它挪到能稳定缓存的位置，
+  并保证一个字都不改。
+- **没有鉴权**。个人自用默认开放；对外暴露前必须加。
+- **`litellm` 依赖树很重**。`import litellm` 放在方法体里懒加载，
+  应用启动和单测不受影响；真要减重可以换成直接调网关的 OpenAI 兼容 HTTP 接口。
+
+## 开发约定
+
+- 分层 `api → service → model → database`：
+  `api` 只负责接收参数、调用 `service`、返回结果，不写业务逻辑；
+  `service` 是业务逻辑的唯一归属地，操作数据库会话。
+- 所有 `/api/` 开头的接口，响应体统一信封。
+- 业务代码直接抛业务异常，无需自己拼装响应：
+
+  ```python
+  from app.exception import NotFoundException
+
+  raise NotFoundException(message="文档不存在")
+  ```
+
+- 建表只走迁移：`make db-init` / `make db-upgrade`，**不要在代码里调 `create_all`**。
+- 改完模型必须 `make db-migrate message="描述"` 生成迁移脚本，审查后再 `make db-upgrade`。
+- **新增模型必须在 `app/model/__init__.py` 里加一行 import**，
+  否则 Alembic autogenerate 会认为这张表不存在（生成的迁移里会凭空少一张表）。
+- 所有代码必须带类型标注，`make typecheck` 检查。

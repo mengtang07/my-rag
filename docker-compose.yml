@@ -1,0 +1,135 @@
+# my-rag 本地依赖栈：PostgreSQL（元数据/正文） + Milvus（向量）
+#
+# 端口规划（避开本机已被占用的端口）：
+#   5432 被 langfuse-postgres 占用 → postgres 映射到 5433
+#   9000 被其它 minio 占用       → milvus 的 minio 映射到 19000/19001
+#   19530 / 9091 空闲            → Milvus gRPC 与健康检查
+#
+# 四个镜像本机均已缓存，docker compose up 不会触发拉取。
+
+name: my-rag
+
+services:
+  # ---------- PostgreSQL：文档元数据、切块正文、会话与消息 ----------
+  postgres:
+    image: postgres:17
+    container_name: my-rag-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: 123123
+      POSTGRES_DB: rag_db
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # 仅在数据卷为空（首次初始化）时执行
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d rag_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # ---------- Milvus standalone：etcd + minio + milvus ----------
+  milvus-etcd:
+    image: quay.io/coreos/etcd:v3.5.25
+    container_name: my-rag-milvus-etcd
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    command:
+      - etcd
+      - --advertise-client-urls=http://milvus-etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd
+    volumes:
+      - milvus_etcd_data:/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  milvus-minio:
+    # 必须用 milvusdb/minio（官方镜像同源），minio/minio 在部分环境拉不动
+    image: milvusdb/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: my-rag-milvus-minio
+    restart: unless-stopped
+    command: ["minio", "server", "/minio_data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:19001
+    ports:
+      - "127.0.0.1:19000:9000"
+      - "127.0.0.1:19001:9001"
+    volumes:
+      - milvus_minio_data:/minio_data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  milvus:
+    image: milvusdb/milvus:v3.0.2
+    container_name: my-rag-milvus
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      TZ: Asia/Shanghai
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
+      MINIO_REGION: us-east-1
+      MINIO_ACCESS_KEY_ID: minioadmin
+      MINIO_SECRET_ACCESS_KEY: minioadmin
+    ports:
+      - "127.0.0.1:19530:19530" # SDK / gRPC
+      - "127.0.0.1:9091:9091" # 健康检查与 WebUI
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      milvus-etcd:
+        condition: service_healthy
+      milvus-minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+
+  # 一次性任务：幂等地建集合 + 建索引 + 加载到内存。
+  # 镜像里只装 pymilvus —— app/core/milvus_schema.py 刻意不依赖任何配置模块，
+  # 保证这个轻量镜像能 import 到它。
+  milvus-init:
+    build:
+      context: ./docker/milvus-init
+    container_name: my-rag-milvus-init
+    environment:
+      MILVUS_URI: http://milvus:19530
+      MILVUS_COLLECTION: rag_chunks
+      MILVUS_EMBED_DIM: 1024
+    volumes:
+      # 挂到 /src 而不是 /app：/app 留给镜像里的 entrypoint.py，
+      # 挂载到 /app 会把它遮住
+      - ./apps/api:/src:ro
+    depends_on:
+      milvus:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  pg_data:
+  milvus_data:
+  milvus_etcd_data:
+  milvus_minio_data:

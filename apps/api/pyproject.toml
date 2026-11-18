@@ -1,0 +1,29 @@
+[project]
+name = "api"
+version = "0.1.0"
+description = "my-rag 后端 API：文档入库、向量检索、流式问答"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic==1.18.4",
+    "asyncpg==0.32.0",
+    "fastapi[standard]==0.136.3",
+    "loguru==0.7.3",
+    "litellm==1.109.1",
+    "psycopg2-binary==2.9.13",
+    "pydantic-settings==2.16.3",
+    "pymilvus==3.0.3",
+    "rag-core",
+    "sse-starlette==3.7.0",
+    "sqlalchemy[asyncio]==2.0.50",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+rag-core = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["app/"]

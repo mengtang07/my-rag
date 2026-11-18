@@ -1,7 +1,7 @@
 [project]
-name = "duyi-service"
+name = "my-rag"
 version = "0.1.0"
-description = "渡一 Python 全栈框架：FastAPI 服务骨架"
+description = "my-rag：个人知识库 RAG 系统（FastAPI + PostgreSQL + Milvus + LiteLLM）"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = []
@@ -11,10 +11,12 @@ members = [
     "apps/*",
     "packages/*",
 ]
+# 前端是独立的 pnpm 工程，不是 uv 成员，必须显式排除
+exclude = ["apps/web"]
 
 [dependency-groups]
 dev = [
-    "aiosqlite==0.21.0",
+    "aiosqlite==0.22.1",
     "debugpy==1.8.21",
     "httpx==0.28.1",
     "mypy==2.1.0",
@@ -32,11 +34,12 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 asyncio_default_test_loop_scope = "function"
 # app 包按源码目录导入，不依赖 editable 安装的路径推断
-pythonpath = ["apps/web-service", "packages/duyi-utils/src"]
-testpaths = ["apps/web-service/test", "packages/duyi-utils/test"]
+pythonpath = ["apps/api", "packages/rag-core/src"]
+testpaths = ["apps/api/test", "packages/rag-core/test"]
 markers = [
     "smoke: 标记为冒烟测试，验证核心流程是否正常",
     "postgres: 需要真实 PostgreSQL 的集成测试（不可用时自动跳过，make test-pg 时失败）",
+    "milvus: 需要真实 Milvus 的集成测试（不可用时自动跳过，make test-milvus 时失败）",
 ]
 
 [tool.test-runner]
