@@ -23,7 +23,7 @@ TEST_DB_NAME: str = os.environ.get("TEST_DB_NAME", "rag_db_test")
 
 def app_db_settings() -> tuple[str, str, str, str, str]:
     """从应用配置里取数据库连接信息"""
-    from app.core.config import db_settings
+    from config import db_settings
 
     return (
         db_settings.host,

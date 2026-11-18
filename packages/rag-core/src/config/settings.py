@@ -1,12 +1,33 @@
 """配置管理
 
-按模块划分前缀：通用 / WEB_ / DB_ / MILVUS_ / LLM_ / RAG_ / LOG_。
-每个前缀一个配置类，模块级暴露单例，调用方 `from app.core.config import db_settings`。
+按模块划分前缀：通用 / WEB_ / DB_ / MILVUS_ / LLM_ / RAG_ / DINGTALK_ / LOG_。
+每个前缀一个配置类，模块级暴露单例，调用方 `from config import db_settings`。
+
+环境变量文件跟着配置代码放在一起：`config/env`
+（样例是 `config/env.example`，复制一份改名即可）。
 """
+
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ENV_FILE: str = ".env"
+# 本包所在目录（config/）
+CONFIG_DIR: Path = Path(__file__).resolve().parent
+
+
+def _resolve_env_file() -> str:
+    """找到环境变量文件
+
+    优先用 `config/env`（跟配置代码放在一起），
+    退而求其次找当前工作目录下的 `.env`（老习惯，别人的机器上可能是这样）。
+    """
+    for candidate in (CONFIG_DIR / "env", Path.cwd() / ".env"):
+        if candidate.is_file():
+            return str(candidate)
+    return str(CONFIG_DIR / "env")
+
+
+ENV_FILE: str = _resolve_env_file()
 
 
 class _BaseSettingsWithEnv(BaseSettings):

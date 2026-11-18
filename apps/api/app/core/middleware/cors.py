@@ -2,7 +2,7 @@
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import web_settings
+from config import web_settings
 
 
 def _split(value: str) -> list[str]:

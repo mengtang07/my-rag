@@ -10,7 +10,7 @@ from typing import Any
 from loguru import logger
 from pymilvus import AsyncMilvusClient, DataType, MilvusClient
 
-from app.core.config import milvus_settings
+from config import milvus_settings
 from app.core.milvus_schema import (
     FIELD_CHUNK_INDEX,
     FIELD_DOC_ID,

@@ -6,7 +6,7 @@ from sqlalchemy import pool
 from alembic import context
 
 # 从项目配置中读取数据库连接信息
-from app.core.config import db_settings
+from config import db_settings
 
 # 导入模型**包**（不是 app.model.base）：
 # `app.model.__init__` 会把全部模型注册到 Base.metadata，

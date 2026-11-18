@@ -15,7 +15,7 @@ from typing import Any
 
 from loguru import logger
 
-from app.core.config import llm_settings
+from config import llm_settings
 from app.exception.base import BusinessException
 from app.exception.llm import LLMException
 from app.exception.llm_timeout import LLMTimeoutException

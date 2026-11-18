@@ -71,7 +71,7 @@ def milvus_available() -> Iterator[bool]:
     """Milvus 是否可用"""
     from pymilvus import MilvusClient
 
-    from app.core.config import milvus_settings
+    from config import milvus_settings
 
     client = None
     try:

@@ -18,7 +18,7 @@ from rag_core.parsing import UnsupportedFormatError, detect_parser
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import llm_settings, rag_settings
+from config import llm_settings, rag_settings
 from app.core.llm import LiteLLMClient, get_llm_client
 from app.core.vector_store import VectorStore, get_vector_store
 from app.exception.parse import ParseException

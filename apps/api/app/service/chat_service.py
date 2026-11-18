@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import llm_settings, rag_settings
+from config import llm_settings, rag_settings
 from app.core.llm import LiteLLMClient, get_llm_client
 from app.core.prompt import RAG_SYSTEM_PROMPT
 from app.core.vector_store import VectorStore, get_vector_store

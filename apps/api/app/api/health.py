@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import llm_settings, milvus_settings
+from config import llm_settings, milvus_settings
 from app.core.database import get_db
 from app.core.vector_store import VectorStore, get_vector_store
 from app.schema.system import SystemStatusResponse

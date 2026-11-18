@@ -14,8 +14,6 @@ my-rag/
 ├── Makefile                  # 常用命令快捷入口
 ├── docker-compose.yml        # PostgreSQL + Milvus（etcd + minio）
 ├── README.md                 # 本文件
-├── .env.example              # 环境变量样例，复制为 .env 后生效
-├── .env.test.example         # 测试环境变量样例
 ├── .python-version           # 统一的 Python 版本
 ├── docker/
 │   ├── postgres/init/        # 首次初始化时执行的 SQL（pg_trgm 扩展）
@@ -73,18 +71,22 @@ my-rag/
 │           ├── hooks/        #   useDocuments / useChat
 │           └── types/api.ts  #   与后端 schema 对应的类型
 └── packages/
-    └── rag-core/             # 共享包：纯 RAG 领域逻辑（发行包带两个 import 包）
+    └── rag-core/             # 共享发行包（带三个 import 包）
         ├── src/
         │   ├── rag_core/
         │   │   ├── models.py     #   Block / ParsedDocument / ChunkDraft
         │   │   ├── parsing/      #   markdown / pdf / docx / html / txt 解析
         │   │   ├── chunking/     #   结构感知切块
         │   │   └── text/         #   CJK 感知的 token 估算
-        │   └── dingding/         #   钉钉知识库接入（独立 import 包）
-        │       ├── client.py     #     开放平台接口的异步客户端
-        │       ├── models.py     #     树结构模型（DingNode / DingBlock / …）
-        │       ├── tree.py       #     树构建：节点解析、标题树、遍历
-        │       └── exceptions.py #     DingTalkError
+        │   ├── dingding/         #   钉钉知识库接入
+        │   │   ├── client.py     #     开放平台接口的异步客户端
+        │   │   ├── models.py     #     树结构模型（DingNode / DingBlock / …）
+        │   │   ├── tree.py       #     树构建：节点解析、标题树、遍历
+        │   │   └── exceptions.py #     DingTalkError
+        │   └── config/           #   配置
+        │       ├── settings.py   #     pydantic-settings 配置类与单例
+        │       ├── env.example  #     环境变量样例
+        │       └── README.md     #     每个变量的说明
         └── test/unit/
 ```
 
@@ -98,7 +100,7 @@ make sync
 make web-install
 
 # 3. 准备配置
-cp .env.example .env
+cp config/env.example config/env
 #    填 LLM_API_KEY（LiteLLM 网关的密钥）
 
 # 4. 起依赖容器（PostgreSQL + Milvus）
@@ -258,25 +260,33 @@ data: {"conversation_id":7,"message_id":19}
 
 ## 配置
 
-| 前缀 | 变量 | 默认 | 说明 |
-| --- | --- | --- | --- |
-| — | `ENVIRONMENT` | development | 生产环境关 `/docs` |
-| WEB_ | `WEB_APP_NAME` / `WEB_CORS_*` | — | 应用名与跨域 |
-| DB_ | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | localhost / **5433** / rag_db / admin / 123123 | 连接串手工拼接，没有 `DATABASE_URL` |
-| MILVUS_ | `MILVUS_URI` | http://localhost:19530 | |
-| | `MILVUS_COLLECTION` | rag_chunks | |
-| | `MILVUS_EMBED_DIM` | **1024** | 必须与网关 embedding 模型一致 |
-| | `MILVUS_SEARCH_EF` / `MILVUS_BATCH_SIZE` / `MILVUS_TIMEOUT` | 64 / 500 / 30 | |
-| LLM_ | `LLM_API_BASE` | http://localhost:4000 | LiteLLM 网关地址 |
-| | `LLM_API_KEY` | — | 网关密钥 |
-| | `LLM_CHAT_MODEL` / `LLM_EMBED_MODEL` / `LLM_RERANK_MODEL` | chat-standard / text-embedding / rerank | 网关侧的模型别名 |
-| | `LLM_EMBED_BATCH_SIZE` / `LLM_TIMEOUT` / `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` / `LLM_CONTEXT_WINDOW` | 32 / 60 / 0.2 / 1024 / 32000 | |
-| RAG_ | `RAG_CHUNK_MAX_CHARS` / `RAG_CHUNK_MIN_CHARS` / `RAG_CHUNK_OVERLAP` | 1200 / 80 / 150 | 切块 |
-| | `RAG_TOP_K` / `RAG_MAX_CONTEXT_TOKENS` / `RAG_HISTORY_TURNS` / `RAG_MAX_FILE_MB` | 5 / 6000 / 6 / 20 | 检索与上下文 |
-| | `RAG_USE_RERANK` | false | 是否走网关重排 |
-| LOG_ | `LOG_LEVEL` | INFO | |
+配置相关的都在 `packages/rag-core/src/config/` 里：
 
-> `LLM_API_KEY` 所在的 `.env` 已被 gitignore，不会进版本库。
+```
+config/
+├── settings.py         # pydantic-settings 配置类与单例
+├── env.example         # 环境变量样例（复制成 env 就是实际用的文件）
+├── env.test.example    # 测试环境变量样例
+└── README.md           # 每个变量的说明（完整表格在这）
+```
+
+```python
+from config import db_settings, llm_settings   # 用法
+```
+
+| 前缀 | 管什么 | 单例 |
+| --- | --- | --- |
+| — | 环境标识 | `common_settings` |
+| `WEB_` | 应用名、跨域 | `web_settings` |
+| `DB_` | PostgreSQL | `db_settings` |
+| `MILVUS_` | Milvus 向量库 | `milvus_settings` |
+| `LLM_` | LiteLLM 网关 | `llm_settings` |
+| `RAG_` | 切块与检索参数 | `rag_settings` |
+| `DINGTALK_` | 钉钉知识库 | `dingtalk_settings` |
+| `LOG_` | 日志级别 | `log_settings` |
+
+> `LLM_API_KEY` 所在的 `config/env` 已被 gitignore，不会进版本库。
+> 全部配置项见 [`config/README.md`](packages/rag-core/src/config/README.md)。
 
 ## 测试
 

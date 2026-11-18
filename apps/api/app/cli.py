@@ -20,7 +20,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from app.core.config import dingtalk_settings
+from config import dingtalk_settings
 from app.core.database import get_session_factory
 from app.core.vector_store import get_vector_store
 from app.exception.base import BusinessException

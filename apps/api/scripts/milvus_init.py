@@ -17,7 +17,7 @@ from pymilvus import MilvusClient
 WEB_SERVICE_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WEB_SERVICE_DIR))
 
-from app.core.config import milvus_settings  # noqa: E402
+from config import milvus_settings  # noqa: E402
 from app.core.milvus_schema import (  # noqa: E402
     FIELD_DOC_ID,
     FIELD_PK,

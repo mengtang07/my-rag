@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import rag_settings
+from config import rag_settings
 from app.core.llm import LiteLLMClient, get_llm_client
 from app.core.vector_store import VectorStore, get_vector_store
 from app.model.chunk import Chunk

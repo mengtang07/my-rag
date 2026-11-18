@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 
-from app.core.config import common_settings, web_settings
+from config import common_settings, web_settings
 from app.core.middleware import register_middleware
 from app.core.openapi import setup_openapi
 from app.exception import BusinessException

@@ -4,6 +4,9 @@
 # 环境变量
 .env
 .env.test
+# 实际使用的环境变量文件（跟配置代码放在一起）
+packages/rag-core/src/config/env
+packages/rag-core/src/config/env.test
 
 # 缓存
 __pycache__/

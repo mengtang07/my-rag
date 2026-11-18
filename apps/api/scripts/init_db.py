@@ -20,7 +20,7 @@ ALEMBIC_INI = WEB_SERVICE_DIR / "alembic.ini"
 # 导入项目配置（在 sys.path 调整之后）
 sys.path.insert(0, str(WEB_SERVICE_DIR))
 
-from app.core.config import db_settings  # noqa: E402
+from config import db_settings  # noqa: E402
 
 
 def _maintenance_url() -> str:
