@@ -22,15 +22,14 @@ from sqlalchemy import select
 
 from app.core.config import dingtalk_settings
 from app.core.database import get_session_factory
-from app.core.dingtalk import DingTalkClient
 from app.core.vector_store import get_vector_store
 from app.exception.base import BusinessException
 from app.model.chunk import Chunk
 from app.model.document import Document
-from app.schema.dingtalk import DingNode, DingTree
-from app.service.dingtalk_service import DingTalkService
 from app.service.ingest_service import IngestService
 from app.service.retrieval_service import RetrievalService
+from rag_core.dingding import DingTalkClient, DingTalkService
+from rag_core.dingding.models import DingNode
 from rag_core.parsing.base import SUPPORTED_SUFFIXES
 
 
@@ -222,6 +221,28 @@ async def _dingtalk_unionid(user_id: str) -> None:
     print("把它填到 .env 的 DINGTALK_OPERATOR_ID")
 
 
+# 各个接口需要的权限 Scope（实测自钉钉的报错信息，不是猜的）
+DINGTALK_SCOPES: tuple[tuple[str, str, bool], ...] = (
+    ("Wiki.Workspace.Read", "列出知识库", True),
+    ("Wiki.Node.Read", "读知识库节点（目录树）", True),
+    ("Storage.File.Read", "读文档正文（blocks）", True),
+    ("Contact.User.Read", "查 unionId（只在需要时开）", False),
+)
+
+
+def _dingtalk_scopes() -> None:
+    """打印待授权的 Scope 与一键申请链接"""
+    app_key = dingtalk_settings.app_key
+    print("钉钉接口需要的权限（点链接申请并开通）：\n")
+    for scope, purpose, required in DINGTALK_SCOPES:
+        mark = "必需" if required else "可选"
+        print(f"  [{mark}] {scope}")
+        print(f"         {purpose}")
+        if app_key:
+            print(f"         https://open-dev.dingtalk.com/appscope/apply?content={app_key}%23{scope}")
+    print("\n申请完记得「创建版本 → 发布」，权限点发布后才生效。")
+
+
 async def _dingtalk_check() -> None:
     """体检整条凭证链：能不能鉴权 → 有没有知识库 → 能不能读节点"""
     client = _build_dingtalk_client()
@@ -275,6 +296,7 @@ def main() -> None:
     dingtalk_parser = subparsers.add_parser("dingtalk", help="钉钉知识库")
     dingtalk_sub = dingtalk_parser.add_subparsers(dest="action", required=True)
     dingtalk_sub.add_parser("check", help="体检整条凭证链")
+    dingtalk_sub.add_parser("scopes", help="打印待授权的权限与申请链接")
     dingtalk_sub.add_parser("workspaces", help="列出知识库")
     unionid_parser = dingtalk_sub.add_parser("unionid", help="由 userId 查 unionId")
     unionid_parser.add_argument("userid", help="组织内的 userId")
@@ -324,6 +346,8 @@ def main() -> None:
         workspace = getattr(args, "workspace", None) or dingtalk_settings.workspace_id
         if args.action == "check":
             asyncio.run(_dingtalk_check())
+        elif args.action == "scopes":
+            _dingtalk_scopes()
         elif args.action == "workspaces":
             asyncio.run(_dingtalk_workspaces())
         elif args.action == "unionid":

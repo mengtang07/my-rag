@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 
-from app.exception.dingtalk import DingTalkException
+from rag_core.dingding.exceptions import DingTalkError
 
 DEFAULT_BASE_URL: str = "https://api.dingtalk.com"
 # 旧版接口的域名。查 unionId 走的是老接口（gettoken + topapi），
@@ -95,14 +95,14 @@ class DingTalkClient:
                 timeout=self.timeout,
             )
         except httpx.HTTPError as exc:
-            raise DingTalkException(
+            raise DingTalkError(
                 message=f"钉钉接口请求失败：{exc}",
                 detail=f"{method} {url}",
                 original_exception=exc,
             ) from exc
 
         if response.status_code >= 400:
-            raise DingTalkException(
+            raise DingTalkError(
                 message=f"钉钉接口返回 HTTP {response.status_code}",
                 detail=response.text[:500],
             )
@@ -110,7 +110,7 @@ class DingTalkClient:
         try:
             payload = response.json()
         except ValueError as exc:
-            raise DingTalkException(
+            raise DingTalkError(
                 message="钉钉接口返回的不是 JSON",
                 detail=response.text[:500],
                 original_exception=exc,
@@ -118,7 +118,7 @@ class DingTalkClient:
 
         if isinstance(payload, dict):
             if payload.get("success") is False:
-                raise DingTalkException(
+                raise DingTalkError(
                     message=(
                         f"钉钉接口报错：{payload.get('code')} "
                         f"{payload.get('message', '')}".strip()
@@ -138,7 +138,7 @@ class DingTalkClient:
             return self._token
 
         if not self.app_key or not self.app_secret:
-            raise DingTalkException(
+            raise DingTalkError(
                 message="缺少钉钉应用凭据，请配置 DINGTALK_APP_KEY 与 DINGTALK_APP_SECRET"
             )
 
@@ -152,7 +152,7 @@ class DingTalkClient:
 
         token = str(result.get("accessToken") or "")
         if not token:
-            raise DingTalkException(message="钉钉鉴权失败：返回里没有 accessToken")
+            raise DingTalkError(message="钉钉鉴权失败：返回里没有 accessToken")
 
         expire_in = float(result.get("expireIn") or 7200)
         self._token = token
@@ -170,14 +170,14 @@ class DingTalkClient:
                 timeout=self.timeout,
             )
         except httpx.HTTPError as exc:
-            raise DingTalkException(
+            raise DingTalkError(
                 message=f"钉钉鉴权请求失败：{exc}",
                 detail="GET /gettoken",
                 original_exception=exc,
             ) from exc
 
         if response.status_code >= 400:
-            raise DingTalkException(
+            raise DingTalkError(
                 message=f"钉钉鉴权返回 HTTP {response.status_code}",
                 detail=response.text[:500],
             )
@@ -185,7 +185,7 @@ class DingTalkClient:
         payload = response.json()
         token = str(payload.get("access_token") or "")
         if not token:
-            raise DingTalkException(
+            raise DingTalkError(
                 message="钉钉鉴权失败：没拿到 access_token",
                 detail=response.text[:500],
             )
@@ -216,7 +216,7 @@ class DingTalkClient:
                 timeout=self.timeout,
             )
         except httpx.HTTPError as exc:
-            raise DingTalkException(
+            raise DingTalkError(
                 message=f"查询用户详情失败：{exc}",
                 detail=f"userid={user_id}",
                 original_exception=exc,
@@ -224,7 +224,7 @@ class DingTalkClient:
 
         payload = response.json()
         if payload.get("errcode"):
-            raise DingTalkException(
+            raise DingTalkError(
                 message=(
                     f"查询用户详情失败：{payload.get('errmsg')} "
                     f"({payload.get('errcode')})"
@@ -235,7 +235,7 @@ class DingTalkClient:
         result = payload.get("result") or {}
         union_id = str(result.get("unionid") or result.get("union_id") or "")
         if not union_id:
-            raise DingTalkException(
+            raise DingTalkError(
                 message=f"没查到 userId={user_id} 对应的 unionId"
             )
         return union_id

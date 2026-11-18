@@ -25,7 +25,7 @@ my-rag/
 │   │   ├── pyproject.toml  alembic.ini  README.md
 │   │   ├── app/
 │   │   │   ├── main.py       # 应用入口：创建 app、注册中间件与异常处理器
-│   │   │   ├── cli.py        # 命令行：ingest / reindex / search
+│   │   │   ├── cli.py        # 命令行：ingest / reindex / search / dingtalk
 │   │   │   ├── api/          # 接口层：只做参数接收与结果返回
 │   │   │   │   ├── health.py #   健康检查 + 系统状态
 │   │   │   │   ├── documents.py # 文档上传/入库/列表/详情/切块/重建/删除
@@ -78,7 +78,12 @@ my-rag/
         │   ├── models.py     #   Block / ParsedDocument / ChunkDraft
         │   ├── parsing/      #   markdown / pdf / docx / html / txt 解析
         │   ├── chunking/     #   结构感知切块
-        │   └── text/         #   CJK 感知的 token 估算
+        │   ├── text/         #   CJK 感知的 token 估算
+        │   └── dingding/     #   钉钉知识库接入
+        │       ├── client.py     #     开放平台接口的异步客户端
+        │       ├── models.py     #     树结构模型（DingNode / DingBlock / …）
+        │       ├── tree.py       #     树构建：节点解析、标题树、遍历
+        │       └── exceptions.py #     DingTalkError
         └── test/unit/
 ```
 

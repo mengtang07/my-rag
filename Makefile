@@ -14,7 +14,7 @@ help:
 	@echo "  数据库：db-init / db-reset / db-migrate / db-upgrade / db-current / db-check"
 	@echo "  向量库：milvus-init / milvus-status / milvus-reset"
 	@echo "  知识库：ingest / ingest-dir / reindex / reindex-all / search"
-	@echo "  钉钉：dingtalk-workspaces / dingtalk-tree / dingtalk-pull"
+	@echo "  钉钉：dingtalk-scopes / dingtalk-check / dingtalk-workspaces / dingtalk-tree / dingtalk-pull"
 	@echo "  测试：test / test-unit / test-integration / test-pg / test-milvus / test-e2e"
 	@echo "  其他：typecheck / smoke"
 
@@ -126,7 +126,7 @@ milvus-drop:
 
 # ---------- 知识库 ----------
 
-.PHONY: ingest ingest-dir reindex reindex-all search dingtalk-check dingtalk-workspaces dingtalk-unionid dingtalk-tree dingtalk-pull
+.PHONY: ingest ingest-dir reindex reindex-all search dingtalk-scopes dingtalk-check dingtalk-workspaces dingtalk-unionid dingtalk-tree dingtalk-pull
 
 # 摄入单个文件：make ingest file=docs/部署手册.md
 ingest:
@@ -149,6 +149,10 @@ search:
 	uv run --package api python -m app.cli search "$(query)"
 
 # ---------- 钉钉知识库 ----------
+
+# 打印待授权的 Scope 与一键申请链接
+dingtalk-scopes:
+	uv run --package api python -m app.cli dingtalk scopes
 
 # 体检整条凭证链：鉴权 → 列知识库 → 读根节点
 dingtalk-check:

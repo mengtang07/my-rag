@@ -14,9 +14,9 @@
 from collections.abc import Iterator
 from typing import Any
 
-from app.core.dingtalk import DingTalkClient
-from app.exception.dingtalk import DingTalkException
-from app.schema.dingtalk import (
+from rag_core.dingding.client import DingTalkClient
+from rag_core.dingding.exceptions import DingTalkError
+from rag_core.dingding.models import (
     KIND_DOCUMENT,
     KIND_FOLDER,
     DingBlock,
@@ -239,7 +239,7 @@ class DingTalkService:
         """
         workspaces = await self.list_workspaces()
         if not workspaces:
-            raise DingTalkException(message="没有可见的钉钉知识库")
+            raise DingTalkError(message="没有可见的钉钉知识库")
 
         if workspace_id:
             workspace = next(
@@ -251,7 +251,7 @@ class DingTalkService:
                 None,
             )
             if workspace is None:
-                raise DingTalkException(message=f"找不到知识库 {workspace_id}")
+                raise DingTalkError(message=f"找不到知识库 {workspace_id}")
         else:
             workspace = workspaces[0]
 

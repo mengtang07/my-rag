@@ -12,6 +12,7 @@ from starlette.responses import JSONResponse
 
 from app.exception.base import BusinessException
 from app.exception.handler.errors import ERROR_MAP, PROTOCOL_ERROR_MAP
+from rag_core.dingding.exceptions import DingTalkError
 
 
 def _lookup(exc: Exception) -> tuple[str, int, str]:
@@ -42,7 +43,8 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
     code, status, default_message = _lookup(exc)
 
     body_message = default_message
-    if isinstance(exc, BusinessException):
+    # 业务异常与钉钉异常都带 message/detail，统一处理
+    if isinstance(exc, (BusinessException, DingTalkError)):
         body_message = exc.message or default_message
         if exc.detail:
             logger.error(f"[{code}] {exc.detail}")

@@ -5,7 +5,9 @@ description = "my-rag 共享包：文档解析、结构感知切块、token 估�
 requires-python = ">=3.14"
 dependencies = [
     "beautifulsoup4==4.15.0",
+    "httpx==0.28.1",
     "markdown-it-py==4.3.0",
+    "pydantic==2.14.3",
     "pymupdf==1.28.2",
     "python-docx==1.2.0",
 ]

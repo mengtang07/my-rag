@@ -8,10 +8,10 @@ from typing import Any
 import httpx
 import pytest
 
-from app.core.dingtalk import DingTalkClient
-from app.exception.dingtalk import DingTalkException
-from app.schema.dingtalk import KIND_DOCUMENT, KIND_FOLDER
-from app.service.dingtalk_service import (
+from rag_core.dingding.client import DingTalkClient
+from rag_core.dingding.exceptions import DingTalkError
+from rag_core.dingding.models import KIND_DOCUMENT, KIND_FOLDER
+from rag_core.dingding.tree import (
     DingTalkService,
     build_block_tree,
     iter_blocks,
@@ -211,7 +211,7 @@ async def test_http_error_raises_business_exception() -> None:
         return httpx.Response(500, text="boom")
 
     client, _ = _make_client(handler)
-    with pytest.raises(DingTalkException):
+    with pytest.raises(DingTalkError):
         await client.list_workspaces()
     await client.close()
 
@@ -227,7 +227,7 @@ async def test_success_false_raises() -> None:
         )
 
     client, _ = _make_client(handler)
-    with pytest.raises(DingTalkException):
+    with pytest.raises(DingTalkError):
         await client.list_workspaces()
     await client.close()
 
@@ -235,7 +235,7 @@ async def test_success_false_raises() -> None:
 async def test_missing_credentials_raise() -> None:
     """没配 appKey/appSecret 时给出明确提示"""
     client = DingTalkClient(app_key="", app_secret="", operator_id="u")
-    with pytest.raises(DingTalkException, match="DINGTALK_APP_KEY"):
+    with pytest.raises(DingTalkError, match="DINGTALK_APP_KEY"):
         await client.access_token()
 
 
@@ -277,7 +277,7 @@ async def test_get_union_id_reports_errcode() -> None:
         )
 
     client, _ = _make_client(handler)
-    with pytest.raises(DingTalkException, match="不合法的userid"):
+    with pytest.raises(DingTalkError, match="不合法的userid"):
         await client.get_union_id("bad-id")
     await client.close()
 
@@ -291,7 +291,7 @@ async def test_get_union_id_when_field_missing() -> None:
         return httpx.Response(200, json={"errcode": 0, "result": {"union_id": ""}})
 
     client, _ = _make_client(handler)
-    with pytest.raises(DingTalkException, match="unionId"):
+    with pytest.raises(DingTalkError, match="unionId"):
         await client.get_union_id("user-1")
     await client.close()
 
