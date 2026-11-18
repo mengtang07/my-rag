@@ -288,6 +288,59 @@ data: {"conversation_id":7,"message_id":19}
 写接口的数据实际会回滚 —— 而进程内的集成测试全程用同一个内存 session，
 根本看不出这个问题，只有真起进程 + 真数据库才暴露得出来。
 
+## 钉钉知识库
+
+数据源之一是**钉钉知识库**。对接了开放平台的四个接口：
+
+| 用途 | 接口 |
+| --- | --- |
+| 鉴权 | `POST /v1.0/oauth2/accessToken` → `{accessToken, expireIn: 7200}` |
+| 知识库列表 | `GET /v2.0/wiki/workspaces` |
+| 节点树 | `GET /v2.0/wiki/nodes?parentNodeId=&operatorId=&maxResults=50` |
+| 文档正文 | `GET /v1.0/doc/suites/documents/{docKey}/blocks?operatorId=` |
+
+所有请求带 `x-acs-dingtalk-access-token` 头。**`operatorId` 必须是用户的 unionId，
+不是 userId** —— 拿错了会返回权限错误。
+
+### 两层树
+
+```
+知识库
+└── 📁 研发
+    ├── 📁 前端
+    │   └── 📄 组件规范.md        ← DingNode.path = ["研发", "前端", "组件规范.md"]
+    └── 📄 部署手册.md
+        └── 快速开始              ← DingBlock 组成的标题树
+            ├── 第一段正文
+            ├── 前置条件
+            └── 安装步骤
+```
+
+- **目录树**（`DingNode`）：知识库 → 文件夹 → 文档，每个节点记着从根到自己的路径
+- **文档内标题树**（`DingBlock`）：blocks 按 `heading.level` 拼成层级树，
+  `iter_blocks()` 能按原文顺序遍历并带上标题路径 —— 切块时直接当面包屑用
+
+块的字段名在钉钉那边并不完全一致（`heading.level` 见过 `"2"` 和 `"heading-2"` 两种写法，
+表格/代码块的字段也不同），所以解析层对字段名做了兼容：
+`text` → 表格的 `cells` → 递归找 `text`/`content`。
+
+### 配置
+
+```shell
+DINGTALK_APP_KEY=       # 企业内部应用的 AppKey
+DINGTALK_APP_SECRET=    # 企业内部应用的 AppSecret
+DINGTALK_OPERATOR_ID=   # 用户的 unionId
+DINGTALK_WORKSPACE_ID=  # 留空则取第一个可见的知识库
+```
+
+### 命令
+
+```shell
+make dingtalk-workspaces                        # 列出知识库
+make dingtalk-tree                              # 打印目录树
+make dingtalk-pull out=tmp/dingtalk.json        # 拉整个知识库（目录树 + 正文）成 JSON
+```
+
 ## 已知限制与后续可做
 
 - **只做稠密单路检索**。精确词/编号/专有名词的召回目前靠 embedding 的语义能力，
@@ -299,6 +352,8 @@ data: {"conversation_id":7,"message_id":19}
 - **没有鉴权**。个人自用默认开放；对外暴露前必须加。
 - **`litellm` 依赖树很重**。`import litellm` 放在方法体里懒加载，
   应用启动和单测不受影响；真要减重可以换成直接调网关的 OpenAI 兼容 HTTP 接口。
+- **钉钉侧只处理在线文档**（`contentType=ALIDOC`）。本地文件（docx/pdf 附件）
+  和代码块/图片还没接 —— 后者目前在钉钉那边就返回 `unknown` 类型。
 
 ## 开发约定
 

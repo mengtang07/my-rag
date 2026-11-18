@@ -14,6 +14,7 @@ help:
 	@echo "  数据库：db-init / db-reset / db-migrate / db-upgrade / db-current / db-check"
 	@echo "  向量库：milvus-init / milvus-status / milvus-reset"
 	@echo "  知识库：ingest / ingest-dir / reindex / reindex-all / search"
+	@echo "  钉钉：dingtalk-workspaces / dingtalk-tree / dingtalk-pull"
 	@echo "  测试：test / test-unit / test-integration / test-pg / test-milvus / test-e2e"
 	@echo "  其他：typecheck / smoke"
 
@@ -125,7 +126,7 @@ milvus-drop:
 
 # ---------- 知识库 ----------
 
-.PHONY: ingest ingest-dir reindex reindex-all search
+.PHONY: ingest ingest-dir reindex reindex-all search dingtalk-workspaces dingtalk-tree dingtalk-pull
 
 # 摄入单个文件：make ingest file=docs/部署手册.md
 ingest:
@@ -146,6 +147,20 @@ reindex-all:
 # 命令行检索（不调用大模型）：make search query="怎么安装依赖"
 search:
 	uv run --package api python -m app.cli search "$(query)"
+
+# ---------- 钉钉知识库 ----------
+
+# 列出可见的钉钉知识库
+dingtalk-workspaces:
+	uv run --package api python -m app.cli dingtalk workspaces
+
+# 打印钉钉知识库的目录树
+dingtalk-tree:
+	uv run --package api python -m app.cli dingtalk tree
+
+# 拉整个知识库（目录树 + 正文）成 JSON：make dingtalk-pull out=tmp/dingtalk.json
+dingtalk-pull:
+	uv run --package api python -m app.cli dingtalk pull --out "$(out)"
 
 # ---------- 测试 ----------
 

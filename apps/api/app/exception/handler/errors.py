@@ -8,6 +8,7 @@
 from fastapi.exceptions import RequestValidationError
 
 from app.exception.database import DatabaseException
+from app.exception.dingtalk import DingTalkException
 from app.exception.llm import LLMException
 from app.exception.llm_timeout import LLMTimeoutException
 from app.exception.not_found import NotFoundException
@@ -18,6 +19,7 @@ ERROR_MAP: dict[type, tuple[str, int, str]] = {
     RequestValidationError: ("422001", 422, "数据验证错误"),
     DatabaseException: ("422001", 422, "数据验证错误"),
     ParseException: ("422002", 422, "文档解析失败"),
+    DingTalkException: ("422003", 422, "钉钉知识库调用失败"),
     NotFoundException: ("404001", 404, "资源不存在"),
     LLMTimeoutException: ("500003", 504, "大模型调用超时"),
     LLMException: ("500002", 502, "大模型服务异常"),

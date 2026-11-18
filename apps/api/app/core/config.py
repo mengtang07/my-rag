@@ -108,6 +108,24 @@ class _RAGSettings(_BaseSettingsWithEnv):
     model_config = SettingsConfigDict(env_file=ENV_FILE, env_prefix="RAG_", extra="ignore")
 
 
+# ---------- 钉钉 ----------
+class _DingtalkSettings(_BaseSettingsWithEnv):
+    """钉钉开放平台配置
+
+    `operator_id` 必须是用户的 **unionId**，不是 userId ——
+    拿错了接口会返回权限错误。
+    """
+
+    app_key: str = ""
+    app_secret: str = ""
+    operator_id: str = ""
+    workspace_id: str = ""
+    base_url: str = "https://api.dingtalk.com"
+    timeout: int = 30
+
+    model_config = SettingsConfigDict(env_file=ENV_FILE, env_prefix="DINGTALK_", extra="ignore")
+
+
 # ---------- 日志 ----------
 class _LogSettings(_BaseSettingsWithEnv):
     """日志配置"""
@@ -123,4 +141,5 @@ db_settings = _DBSettings()
 milvus_settings = _MilvusSettings()
 llm_settings = _LLMSettings()
 rag_settings = _RAGSettings()
+dingtalk_settings = _DingtalkSettings()
 log_settings = _LogSettings()

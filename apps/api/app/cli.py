@@ -6,19 +6,29 @@ python -m app.cli ingest --dir <目录>     # 摄入整个目录（递归）
 python -m app.cli reindex --doc <id>      # 重建某个文档的向量
 python -m app.cli reindex --all           # 全量重建
 python -m app.cli search "<问题>"         # 只检索，不调大模型
+python -m app.cli dingtalk workspaces    # 列出钉钉知识库
+python -m app.cli dingtalk tree           # 打印钉钉知识库的目录树
+python -m app.cli dingtalk pull           # 拉整个知识库（目录树 + 正文）成 JSON
 ```
 """
 
 import argparse
 import asyncio
+import json
+import sys
 from pathlib import Path
 
 from sqlalchemy import select
 
+from app.core.config import dingtalk_settings
 from app.core.database import get_session_factory
+from app.core.dingtalk import DingTalkClient
 from app.core.vector_store import get_vector_store
+from app.exception.base import BusinessException
 from app.model.chunk import Chunk
 from app.model.document import Document
+from app.schema.dingtalk import DingNode, DingTree
+from app.service.dingtalk_service import DingTalkService
 from app.service.ingest_service import IngestService
 from app.service.retrieval_service import RetrievalService
 from rag_core.parsing.base import SUPPORTED_SUFFIXES
@@ -122,6 +132,84 @@ async def _search(query: str, top_k: int) -> None:
         print(f"{hit.content}\n")
 
 
+def _render_tree(nodes: list[DingNode], indent: int = 0) -> None:
+    """把目录树打印成缩进列表"""
+    for node in nodes:
+        marker = "📁" if node.kind == "folder" else "📄"
+        extra = f"  [{node.content_type}]" if node.content_type else ""
+        print(f"{'  ' * indent}{marker} {node.name}{extra}")
+        if node.children:
+            _render_tree(node.children, indent + 1)
+
+
+async def _dingtalk_workspaces() -> None:
+    """列出钉钉知识库"""
+    client = _build_dingtalk_client()
+    try:
+        workspaces = await client.list_workspaces()
+    finally:
+        await client.close()
+
+    if not workspaces:
+        print("没有可见的知识库")
+        return
+
+    print(f"共 {len(workspaces)} 个知识库：\n")
+    for workspace in workspaces:
+        workspace_id = workspace.get("workspaceId") or workspace.get("id") or ""
+        name = workspace.get("name") or "(未命名)"
+        root = workspace.get("rootNodeId") or ""
+        print(f"  {name}")
+        print(f"    workspaceId: {workspace_id}")
+        print(f"    rootNodeId:  {root}")
+
+
+async def _dingtalk_tree(workspace_id: str | None) -> None:
+    """打印钉钉知识库的目录树"""
+    client = _build_dingtalk_client()
+    try:
+        tree, _ = await DingTalkService(client).pull(
+            workspace_id, skip_content=True
+        )
+    finally:
+        await client.close()
+
+    print(f"知识库：{tree.workspace_name or tree.workspace_id}\n")
+    _render_tree(tree.nodes)
+
+
+async def _dingtalk_pull(workspace_id: str | None, out: str | None) -> None:
+    """拉整个知识库（目录树 + 正文）存成 JSON"""
+    client = _build_dingtalk_client()
+    try:
+        tree, documents = await DingTalkService(client).pull(workspace_id)
+    finally:
+        await client.close()
+
+    payload = {
+        "tree": tree.model_dump(),
+        "documents": [document.model_dump() for document in documents],
+    }
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
+
+    if out:
+        Path(out).write_text(text, encoding="utf-8")
+        print(f"已写入 {out}（{len(documents)} 篇文档）")
+    else:
+        print(text)
+
+
+def _build_dingtalk_client() -> DingTalkClient:
+    """按配置建钉钉客户端"""
+    return DingTalkClient(
+        app_key=dingtalk_settings.app_key,
+        app_secret=dingtalk_settings.app_secret,
+        operator_id=dingtalk_settings.operator_id,
+        base_url=dingtalk_settings.base_url,
+        timeout=float(dingtalk_settings.timeout),
+    )
+
+
 def main() -> None:
     """命令行入口"""
     parser = argparse.ArgumentParser(prog="app.cli", description="my-rag 命令行")
@@ -138,6 +226,15 @@ def main() -> None:
     search_parser = subparsers.add_parser("search", help="检索知识库")
     search_parser.add_argument("query", help="检索问题")
     search_parser.add_argument("--top-k", type=int, default=5, help="返回条数")
+
+    dingtalk_parser = subparsers.add_parser("dingtalk", help="钉钉知识库")
+    dingtalk_sub = dingtalk_parser.add_subparsers(dest="action", required=True)
+    dingtalk_sub.add_parser("workspaces", help="列出知识库")
+    tree_parser = dingtalk_sub.add_parser("tree", help="打印目录树")
+    tree_parser.add_argument("--workspace", help="知识库 id")
+    pull_parser = dingtalk_sub.add_parser("pull", help="拉整个知识库（目录树 + 正文）")
+    pull_parser.add_argument("--workspace", help="知识库 id")
+    pull_parser.add_argument("--out", help="输出 JSON 文件路径")
 
     args = parser.parse_args()
 
@@ -175,6 +272,23 @@ def main() -> None:
         asyncio.run(_search(args.query, args.top_k))
         return
 
+    if args.command == "dingtalk":
+        workspace = getattr(args, "workspace", None) or dingtalk_settings.workspace_id
+        if args.action == "workspaces":
+            asyncio.run(_dingtalk_workspaces())
+        elif args.action == "tree":
+            asyncio.run(_dingtalk_tree(workspace))
+        elif args.action == "pull":
+            asyncio.run(_dingtalk_pull(workspace, args.out))
+        return
+
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BusinessException as exc:
+        # 命令行给人话看，不甩 traceback
+        print(f"✗ {exc.message}", file=sys.stderr)
+        if exc.detail:
+            print(f"  {exc.detail}", file=sys.stderr)
+        sys.exit(1)
