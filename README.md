@@ -84,8 +84,8 @@ my-rag/
         │   │   ├── tree.py       #     树构建：节点解析、标题树、遍历
         │   │   └── exceptions.py #     DingTalkError
         │   └── config/           #   配置
-        │       ├── settings.py   #     pydantic-settings 配置类与单例
-        │       ├── env.example  #     环境变量样例
+        │       ├── settings.py   #    通用 / Web / DB / Milvus / LLM / RAG / 日志
+        │       ├── dingding_setting.py # 钉钉开放平台
         │       └── README.md     #     每个变量的说明
         └── test/unit/
 ```
@@ -100,7 +100,7 @@ make sync
 make web-install
 
 # 3. 准备配置
-cp config/env.example config/env
+cp .env.example .env
 #    填 LLM_API_KEY（LiteLLM 网关的密钥）
 
 # 4. 起依赖容器（PostgreSQL + Milvus）
@@ -263,11 +263,18 @@ data: {"conversation_id":7,"message_id":19}
 配置相关的都在 `packages/rag-core/src/config/` 里：
 
 ```
-config/
-├── settings.py         # pydantic-settings 配置类与单例
-├── env.example         # 环境变量样例（复制成 env 就是实际用的文件）
-├── env.test.example    # 测试环境变量样例
+packages/rag-core/src/config/
+├── settings.py         # 通用 / Web / DB / Milvus / LLM / RAG / 日志配置
+├── dingding_setting.py # 钉钉开放平台配置
 └── README.md           # 每个变量的说明（完整表格在这）
+```
+
+环境变量文件放在仓库最外层：
+
+```
+.env                    # 实际使用的环境变量（gitignored）
+.env.example            # 环境变量样例
+.env.test.example       # 测试环境变量样例
 ```
 
 ```python
@@ -285,7 +292,7 @@ from config import db_settings, llm_settings   # 用法
 | `DINGTALK_` | 钉钉知识库 | `dingtalk_settings` |
 | `LOG_` | 日志级别 | `log_settings` |
 
-> `LLM_API_KEY` 所在的 `config/env` 已被 gitignore，不会进版本库。
+> `LLM_API_KEY` 所在的根目录 `.env` 已被 gitignore，不会进版本库。
 > 全部配置项见 [`config/README.md`](packages/rag-core/src/config/README.md)。
 
 ## 测试

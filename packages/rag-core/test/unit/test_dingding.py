@@ -591,3 +591,66 @@ async def test_resolve_union_ids_skips_failures() -> None:
 
     assert resolved == {"u-1": "union-u-1"}
     await client.close()
+
+
+async def test_list_department_users_follows_cursor() -> None:
+    """旧接口是游标翻页（cursor + has_more + next_cursor），不是 offset"""
+    seen_cursors: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/gettoken":
+            return httpx.Response(200, json={"access_token": "old", "expires_in": 7200})
+        if request.url.path == "/topapi/v2/user/list":
+            cursor = request.url.params.get("cursor", "")
+            seen_cursors.append(cursor)
+            if cursor == "0":
+                return httpx.Response(
+                    200,
+                    json={
+                        "errcode": 0,
+                        "result": {
+                            "list": [{"userid": "u-1", "name": "张三"}],
+                            "has_more": True,
+                            "next_cursor": 42,
+                        },
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "errcode": 0,
+                    "result": {
+                        "list": [{"userid": "u-2", "name": "李四"}],
+                        "has_more": False,
+                        "next_cursor": 0,
+                    },
+                },
+            )
+        return httpx.Response(404)
+
+    client, _ = _make_client(handler)
+    members = await client.list_department_users(1)
+
+    assert [member["userid"] for member in members] == ["u-1", "u-2"]
+    assert seen_cursors == ["0", "42"]
+    await client.close()
+
+
+async def test_list_department_users_uses_dept_id_param() -> None:
+    """旧接口的参数名是 dept_id（不是 department_id）"""
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/gettoken":
+            return httpx.Response(200, json={"access_token": "old", "expires_in": 7200})
+        seen.update(dict(request.url.params))
+        return httpx.Response(
+            200, json={"errcode": 0, "result": {"list": [], "has_more": False}}
+        )
+
+    client, _ = _make_client(handler)
+    await client.list_department_users(7)
+
+    assert seen["dept_id"] == "7"
+    assert "department_id" not in seen
+    await client.close()

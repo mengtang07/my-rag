@@ -4,10 +4,17 @@
 
 ```
 config/
-├── settings.py         # pydantic-settings 配置类与单例
-├── env.example         # 环境变量样例（复制成 env 就是实际用的文件）
-├── env.test.example    # 测试环境变量样例
-└── env                 # 实际使用的环境变量文件（gitignored）
+├── settings.py         # 通用 / Web / 数据库 / Milvus / LLM / RAG / 日志配置
+├── dingding_setting.py # 钉钉开放平台配置
+└── README.md           # 本文件
+```
+
+环境变量文件统一放在仓库最外层：
+
+```
+.env                   # 实际使用的环境变量文件（gitignored）
+.env.example           # 环境变量样例
+.env.test.example      # 测试环境变量样例
 ```
 
 ## 怎么用
@@ -33,13 +40,14 @@ db_settings.host          # localhost
 
 ## 环境变量文件
 
-`config/env` 是实际生效的文件（gitignored），样例在 `config/env.example`：
+仓库最外层的 `.env` 是实际生效的文件（gitignored），样例在 `.env.example`：
 
 ```shell
-cp config/env.example config/env
+cp .env.example .env
 ```
 
-查找顺序：`config/env` → 当前工作目录的 `.env`（兼容老习惯）。
+配置代码默认读仓库根目录的 `.env`，找不到时退回当前工作目录的 `.env`
+（读不到就用字段默认值，不会报错）。
 
 > **踩过的坑**：子类必须**重复声明** `env_file`。pydantic-settings 在子类里换掉
 > 整个 `model_config` 时，只写 `env_prefix` 会把 `env_file` 一起冲掉，`.env` 就读不到了。

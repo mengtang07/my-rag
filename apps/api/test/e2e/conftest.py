@@ -34,7 +34,7 @@ SERVER_URL = f"http://127.0.0.1:{TEST_SERVER_PORT}"
 
 def _load_env() -> None:
     """加载 .env（网关密钥、Milvus 地址都在这里）"""
-    env_file = PROJECT_ROOT / "packages" / "rag-core" / "src" / "config" / "env"
+    env_file = PROJECT_ROOT / ".env"
     if env_file.is_file():
         load_dotenv(env_file, override=False)
 

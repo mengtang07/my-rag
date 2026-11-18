@@ -300,51 +300,79 @@ class DingTalkClient:
         self,
         department_id: int = 1,
         *,
-        size: int = 50,
+        size: int = 100,
+        max_pages: int = 20,
     ) -> list[dict[str, Any]]:
         """列出部门下的成员（用来在组织里找到自己）
 
         需要 `qyapi_get_department_member` 权限。部门 1 是根部门，
         通常涵盖整个组织。
 
+        这是旧版接口，用**游标翻页**（`cursor` + `has_more` + `next_cursor`），
+        不是 offset。
+
         Args:
             department_id: 部门 id，1 = 根部门
             size: 每页条数
+            max_pages: 最多翻几页（防止组织特别大时拉太久）
 
         Returns:
             成员列表，每项含 `userid` / `name` / `department` 等
         """
         token = await self.legacy_access_token()
+        members: list[dict[str, Any]] = []
+        cursor = 0
 
-        try:
-            response = await self._http().get(
-                f"{OAPI_BASE_URL}/topapi/v2/user/list",
-                params={
-                    "access_token": token,
-                    "department_id": department_id,
-                    "size": size,
-                },
-                timeout=self.timeout,
-            )
-        except httpx.HTTPError as exc:
-            raise DingTalkError(
-                message=f"列部门成员失败：{exc}",
-                detail=f"department_id={department_id}",
-                original_exception=exc,
-            ) from exc
+        for _ in range(max_pages):
+            try:
+                response = await self._http().get(
+                    f"{OAPI_BASE_URL}/topapi/v2/user/list",
+                    params={
+                        "access_token": token,
+                        # 旧接口的参数名是 dept_id，不是 department_id
+                        "dept_id": department_id,
+                        "size": size,
+                        "cursor": cursor,
+                    },
+                    timeout=self.timeout,
+                )
+            except httpx.HTTPError as exc:
+                raise DingTalkError(
+                    message=f"列部门成员失败：{exc}",
+                    detail=f"dept_id={department_id}",
+                    original_exception=exc,
+                ) from exc
 
-        payload = response.json()
-        if payload.get("errcode"):
-            raise DingTalkError(
-                message=(
-                    f"列部门成员失败：{payload.get('errmsg')} "
-                    f"({payload.get('errcode')})"
-                ).strip(),
-                detail=response.text[:500],
-            )
+            payload = response.json()
+            if payload.get("errcode"):
+                raise DingTalkError(
+                    message=(
+                        f"列部门成员失败：{payload.get('errmsg')} "
+                        f"({payload.get('errcode')})"
+                    ).strip(),
+                    detail=response.text[:500],
+                )
 
-        result = payload.get("result")
-        return result if isinstance(result, list) else []
+            result = payload.get("result")
+            if isinstance(result, list):
+                # 老版本直接返回数组
+                members.extend(item for item in result if isinstance(item, dict))
+                break
+
+            if not isinstance(result, dict):
+                break
+
+            batch = result.get("list")
+            if isinstance(batch, list):
+                members.extend(item for item in batch if isinstance(item, dict))
+
+            if not result.get("has_more"):
+                break
+            cursor = int(result.get("next_cursor") or 0)
+            if cursor == 0:
+                break
+
+        return members
 
     async def resolve_union_ids(self, user_ids: list[str]) -> dict[str, str]:
         """批量把 userId 换成 unionId

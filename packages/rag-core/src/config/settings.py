@@ -1,10 +1,11 @@
 """配置管理
 
-按模块划分前缀：通用 / WEB_ / DB_ / MILVUS_ / LLM_ / RAG_ / DINGTALK_ / LOG_。
+按模块划分前缀：通用 / WEB_ / DB_ / MILVUS_ / LLM_ / RAG_ / LOG_。
+钉钉的配置独立在 `config/dingding_setting.py`。
 每个前缀一个配置类，模块级暴露单例，调用方 `from config import db_settings`。
 
-环境变量文件跟着配置代码放在一起：`config/env`
-（样例是 `config/env.example`，复制一份改名即可）。
+环境变量文件统一放在仓库最外层：`.env`
+（样例是 `.env.example`，复制一份改名即可）。
 """
 
 from pathlib import Path
@@ -13,18 +14,20 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 本包所在目录（config/）
 CONFIG_DIR: Path = Path(__file__).resolve().parent
+# 仓库根目录（config/ → src/ → rag-core/ → packages/ → 仓库根）
+PROJECT_ROOT: Path = CONFIG_DIR.parents[3]
 
 
 def _resolve_env_file() -> str:
     """找到环境变量文件
 
-    优先用 `config/env`（跟配置代码放在一起），
-    退而求其次找当前工作目录下的 `.env`（老习惯，别人的机器上可能是这样）。
+    只有仓库最外层的 `.env`；没有就退回当前工作目录，
+    再没有也不报错（pydantic-settings 会直接用字段默认值）。
     """
-    for candidate in (CONFIG_DIR / "env", Path.cwd() / ".env"):
-        if candidate.is_file():
-            return str(candidate)
-    return str(CONFIG_DIR / "env")
+    root_env = PROJECT_ROOT / ".env"
+    if root_env.is_file():
+        return str(root_env)
+    return str(Path.cwd() / ".env")
 
 
 ENV_FILE: str = _resolve_env_file()
@@ -129,24 +132,6 @@ class _RAGSettings(_BaseSettingsWithEnv):
     model_config = SettingsConfigDict(env_file=ENV_FILE, env_prefix="RAG_", extra="ignore")
 
 
-# ---------- 钉钉 ----------
-class _DingtalkSettings(_BaseSettingsWithEnv):
-    """钉钉开放平台配置
-
-    `operator_id` 必须是用户的 **unionId**，不是 userId ——
-    拿错了接口会返回权限错误。
-    """
-
-    app_key: str = ""
-    app_secret: str = ""
-    operator_id: str = ""
-    workspace_id: str = ""
-    base_url: str = "https://api.dingtalk.com"
-    timeout: int = 30
-
-    model_config = SettingsConfigDict(env_file=ENV_FILE, env_prefix="DINGTALK_", extra="ignore")
-
-
 # ---------- 日志 ----------
 class _LogSettings(_BaseSettingsWithEnv):
     """日志配置"""
@@ -162,5 +147,4 @@ db_settings = _DBSettings()
 milvus_settings = _MilvusSettings()
 llm_settings = _LLMSettings()
 rag_settings = _RAGSettings()
-dingtalk_settings = _DingtalkSettings()
 log_settings = _LogSettings()
