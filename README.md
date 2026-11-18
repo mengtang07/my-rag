@@ -73,13 +73,14 @@ my-rag/
 │           ├── hooks/        #   useDocuments / useChat
 │           └── types/api.ts  #   与后端 schema 对应的类型
 └── packages/
-    └── rag-core/             # 共享包：纯 RAG 领域逻辑
-        ├── src/rag_core/
-        │   ├── models.py     #   Block / ParsedDocument / ChunkDraft
-        │   ├── parsing/      #   markdown / pdf / docx / html / txt 解析
-        │   ├── chunking/     #   结构感知切块
-        │   ├── text/         #   CJK 感知的 token 估算
-        │   └── dingding/     #   钉钉知识库接入
+    └── rag-core/             # 共享包：纯 RAG 领域逻辑（发行包带两个 import 包）
+        ├── src/
+        │   ├── rag_core/
+        │   │   ├── models.py     #   Block / ParsedDocument / ChunkDraft
+        │   │   ├── parsing/      #   markdown / pdf / docx / html / txt 解析
+        │   │   ├── chunking/     #   结构感知切块
+        │   │   └── text/         #   CJK 感知的 token 估算
+        │   └── dingding/         #   钉钉知识库接入（独立 import 包）
         │       ├── client.py     #     开放平台接口的异步客户端
         │       ├── models.py     #     树结构模型（DingNode / DingBlock / …）
         │       ├── tree.py       #     树构建：节点解析、标题树、遍历

@@ -12,7 +12,7 @@ from starlette.responses import JSONResponse
 
 from app.exception.base import BusinessException
 from app.exception.handler.errors import ERROR_MAP, PROTOCOL_ERROR_MAP
-from rag_core.dingding.exceptions import DingTalkError
+from dingding.exceptions import DingTalkError
 
 
 def _lookup(exc: Exception) -> tuple[str, int, str]:

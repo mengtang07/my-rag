@@ -10,9 +10,9 @@
 只用 httpx + pydantic，不依赖 FastAPI / SQLAlchemy。
 """
 
-from rag_core.dingding.client import DingTalkClient
-from rag_core.dingding.exceptions import DingTalkError
-from rag_core.dingding.models import (
+from dingding.client import DingTalkClient
+from dingding.exceptions import DingTalkError
+from dingding.models import (
     KIND_DOCUMENT,
     KIND_FOLDER,
     KIND_WORKSPACE,
@@ -21,7 +21,7 @@ from rag_core.dingding.models import (
     DingNode,
     DingTree,
 )
-from rag_core.dingding.tree import (
+from dingding.tree import (
     DingTalkService,
     build_block_tree,
     iter_blocks,

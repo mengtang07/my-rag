@@ -28,8 +28,9 @@ from app.model.chunk import Chunk
 from app.model.document import Document
 from app.service.ingest_service import IngestService
 from app.service.retrieval_service import RetrievalService
-from rag_core.dingding import DingTalkClient, DingTalkService
-from rag_core.dingding.models import DingNode
+from dingding import DingTalkClient, DingTalkService
+from dingding.exceptions import DingTalkError
+from dingding.models import DingNode
 from rag_core.parsing.base import SUPPORTED_SUFFIXES
 
 
@@ -221,12 +222,24 @@ async def _dingtalk_unionid(user_id: str) -> None:
     print("把它填到 .env 的 DINGTALK_OPERATOR_ID")
 
 
+async def _dingtalk_unionid_me() -> None:
+    """查当前授权用户自己的 unionId（不需要先知道 userId）"""
+    client = _build_dingtalk_client()
+    try:
+        union_id = await client.get_my_union_id()
+    finally:
+        await client.close()
+
+    print(f"unionId {union_id}")
+    print("把它填到 .env 的 DINGTALK_OPERATOR_ID")
+
+
 # 各个接口需要的权限 Scope（实测自钉钉的报错信息，不是猜的）
 DINGTALK_SCOPES: tuple[tuple[str, str, bool], ...] = (
     ("Wiki.Workspace.Read", "列出知识库", True),
     ("Wiki.Node.Read", "读知识库节点（目录树）", True),
     ("Storage.File.Read", "读文档正文（blocks）", True),
-    ("Contact.User.Read", "查 unionId（只在需要时开）", False),
+    ("Contact.User.Read", "查 unionId（没配 operatorId 时才需要）", False),
 )
 
 
@@ -235,7 +248,7 @@ def _dingtalk_scopes() -> None:
     app_key = dingtalk_settings.app_key
     print("钉钉接口需要的权限（点链接申请并开通）：\n")
     for scope, purpose, required in DINGTALK_SCOPES:
-        mark = "必需" if required else "可选"
+        mark = "必需" if required else "缺 operatorId 时才需要"
         print(f"  [{mark}] {scope}")
         print(f"         {purpose}")
         if app_key:
@@ -300,6 +313,7 @@ def main() -> None:
     dingtalk_sub.add_parser("workspaces", help="列出知识库")
     unionid_parser = dingtalk_sub.add_parser("unionid", help="由 userId 查 unionId")
     unionid_parser.add_argument("userid", help="组织内的 userId")
+    dingtalk_sub.add_parser("unionid-me", help="查当前授权用户自己的 unionId")
     tree_parser = dingtalk_sub.add_parser("tree", help="打印目录树")
     tree_parser.add_argument("--workspace", help="知识库 id")
     pull_parser = dingtalk_sub.add_parser("pull", help="拉整个知识库（目录树 + 正文）")
@@ -352,6 +366,8 @@ def main() -> None:
             asyncio.run(_dingtalk_workspaces())
         elif args.action == "unionid":
             asyncio.run(_dingtalk_unionid(args.userid))
+        elif args.action == "unionid-me":
+            asyncio.run(_dingtalk_unionid_me())
         elif args.action == "tree":
             asyncio.run(_dingtalk_tree(workspace))
         elif args.action == "pull":
@@ -362,7 +378,7 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except BusinessException as exc:
+    except (BusinessException, DingTalkError) as exc:
         # 命令行给人话看，不甩 traceback
         print(f"✗ {exc.message}", file=sys.stderr)
         if exc.detail:

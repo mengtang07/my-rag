@@ -1,14 +1,22 @@
 # rag-core
 
-my-rag 的共享包：**纯 RAG 领域逻辑**，不依赖 FastAPI / SQLAlchemy / litellm。
+my-rag 的共享发行包：**纯 RAG 领域逻辑**，不依赖 FastAPI / SQLAlchemy / litellm。
 
-| 模块 | 职责 |
-| --- | --- |
-| `models.py` | `Block` / `ParsedDocument` / `ChunkDraft` 三个数据类 |
-| `parsing/` | 按格式解析文档：markdown / pdf / docx / html / txt |
-| `chunking/` | 结构感知切块（标题树 → 段落 → 句子 → 硬切） |
-| `text/` | CJK 感知的 token 估算 |
-| `dingding/` | 钉钉知识库接入：客户端 + 两层树构建 |
+一个发行包里带两个 import 包：
+
+```
+src/
+├── rag_core/     # RAG 领域逻辑
+│   ├── models.py     #   Block / ParsedDocument / ChunkDraft
+│   ├── parsing/      #   markdown / pdf / docx / html / txt 解析
+│   ├── chunking/     #   结构感知切块
+│   └── text/         #   CJK 感知的 token 估算
+└── dingding/     # 钉钉知识库接入（独立 import 包）
+    ├── client.py     #   开放平台接口的异步客户端
+    ├── models.py     #   树结构模型（DingNode / DingBlock / …）
+    ├── tree.py       #   树构建：节点解析、标题树、遍历
+    └── exceptions.py #   DingTalkError
+```
 
 ## 设计要点
 
@@ -20,7 +28,7 @@ my-rag 的共享包：**纯 RAG 领域逻辑**，不依赖 FastAPI / SQLAlchemy 
 
 ## 钉钉知识库
 
-`rag_core.dingding` 把钉钉知识库拉成**两层树**：
+`dingding` 把钉钉知识库拉成**两层树**：
 
 ```
 知识库

@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 
-from rag_core.dingding.exceptions import DingTalkError
+from dingding.exceptions import DingTalkError
 
 DEFAULT_BASE_URL: str = "https://api.dingtalk.com"
 # 旧版接口的域名。查 unionId 走的是老接口（gettoken + topapi），
@@ -102,6 +102,21 @@ class DingTalkClient:
             ) from exc
 
         if response.status_code >= 400:
+            # 尽量从响应体里提取钉钉的错误码，给出可操作的提示
+            payload: dict[str, Any] = {}
+            try:
+                parsed = response.json()
+                if isinstance(parsed, dict):
+                    payload = parsed
+            except ValueError:
+                pass
+
+            code = str(payload.get("code") or "")
+            if code:
+                raise DingTalkError(
+                    message=self._describe_error(code, payload),
+                    detail=response.text[:500],
+                )
             raise DingTalkError(
                 message=f"钉钉接口返回 HTTP {response.status_code}",
                 detail=response.text[:500],
@@ -127,6 +142,14 @@ class DingTalkClient:
                 )
             if "result" in payload:
                 return payload["result"]
+            # 没有 result 却带 code —— 是错误响应。
+            # 比如 operatorId 缺失时钉钉回的是 HTTP 200 + {"code":"MissingoperatorId"}，
+            # 不拦住的话后面会变成「没查到知识库」，把问题指错方向。
+            if payload.get("code"):
+                raise DingTalkError(
+                    message=self._describe_error(str(payload.get("code")), payload),
+                    detail=response.text[:500],
+                )
 
         return payload
 
@@ -158,6 +181,18 @@ class DingTalkClient:
         self._token = token
         self._token_expire_at = time.time() + max(0.0, expire_in - TOKEN_SKEW)
         return token
+
+    @staticmethod
+    def _describe_error(code: str, payload: dict[str, Any]) -> str:
+        """把钉钉的错误码翻译成人话"""
+        message = str(payload.get("message") or "")
+        if "operatorid" in f"{code} {message}".lower():
+            return (
+                "缺少 operatorId —— 钉钉的文档/知识库接口必须带 operatorId，"
+                "而且它要的是 unionId（不是 userId）。"
+                "可以用 `make dingtalk-unionid-me` 直接查自己当前的 unionId"
+            )
+        return f"钉钉接口报错：{code} {message}".strip()
 
     # ---------- 身份 ----------
 
@@ -237,6 +272,27 @@ class DingTalkClient:
         if not union_id:
             raise DingTalkError(
                 message=f"没查到 userId={user_id} 对应的 unionId"
+            )
+        return union_id
+
+    async def get_my_union_id(self) -> str:
+        """拿当前授权用户自己的 unionId
+
+        `GET /v1.0/contact/users/me` —— `me` 是接口约定的特殊值，代表当前授权人，
+        所以**不需要先知道 userId**。需要 `Contact.User.Read` 权限。
+
+        Returns:
+            unionId
+        """
+        result = await self._request("GET", "/v1.0/contact/users/me")
+
+        union_id = str(
+            (result.get("unionId") if isinstance(result, dict) else "") or ""
+        )
+        if not union_id:
+            raise DingTalkError(
+                message="没拿到 unionId",
+                detail="接口返回里没有 unionId 字段",
             )
         return union_id
 

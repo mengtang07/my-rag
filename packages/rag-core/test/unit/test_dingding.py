@@ -8,10 +8,10 @@ from typing import Any
 import httpx
 import pytest
 
-from rag_core.dingding.client import DingTalkClient
-from rag_core.dingding.exceptions import DingTalkError
-from rag_core.dingding.models import KIND_DOCUMENT, KIND_FOLDER
-from rag_core.dingding.tree import (
+from dingding.client import DingTalkClient
+from dingding.exceptions import DingTalkError
+from dingding.models import KIND_DOCUMENT, KIND_FOLDER
+from dingding.tree import (
     DingTalkService,
     build_block_tree,
     iter_blocks,
@@ -465,3 +465,83 @@ async def test_iter_document_nodes_walks_depth_first() -> None:
 
     titles = [node.name for node in iter_document_nodes(tree.nodes)]
     assert titles == ["部署手册", "总览"]
+
+
+# ---------- operatorId 缺失时的报错 ----------
+
+
+async def test_missing_operatorid_error_is_translated() -> None:
+    """operatorId 缺失时给出可操作的提示，而不是「没查到知识库」
+
+    钉钉对缺 operatorId 的返回有两种形态，都是 HTTP 4xx/200 + code：
+    200 + {"code":"MissingoperatorId"}、400 + {"code":"paramError"}。
+    两种都要翻译。
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1.0/oauth2/accessToken":
+            return httpx.Response(200, json={"accessToken": "tok", "expireIn": 7200})
+        return httpx.Response(
+            400, json={"code": "paramError", "message": "paramError-operatorId"}
+        )
+
+    client, _ = _make_client(handler)
+    with pytest.raises(DingTalkError, match="operatorId"):
+        await client.list_workspaces()
+    await client.close()
+
+
+async def test_missing_operatorid_on_http_200_is_translated() -> None:
+    """HTTP 200 但 code 表明是错误时也要拦住"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1.0/oauth2/accessToken":
+            return httpx.Response(200, json={"accessToken": "tok", "expireIn": 7200})
+        return httpx.Response(
+            200,
+            json={
+                "code": "MissingoperatorId",
+                "message": "operatorId is mandatory for this action.",
+            },
+        )
+
+    client, _ = _make_client(handler)
+    with pytest.raises(DingTalkError, match="operatorId"):
+        await client.list_workspaces()
+    await client.close()
+
+
+async def test_get_my_union_id() -> None:
+    """contact/users/me 直接拿当前授权人的 unionId"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1.0/oauth2/accessToken":
+            return httpx.Response(200, json={"accessToken": "tok", "expireIn": 7200})
+        if request.url.path == "/v1.0/contact/users/me":
+            return httpx.Response(
+                200,
+                json={
+                    "unionId": "union-me",
+                    "nick": "张三",
+                    "openId": "open-1",
+                },
+            )
+        return httpx.Response(404)
+
+    client, _ = _make_client(handler)
+    assert await client.get_my_union_id() == "union-me"
+    await client.close()
+
+
+async def test_get_my_union_id_when_field_missing() -> None:
+    """没拿到 unionId 字段时报错"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1.0/oauth2/accessToken":
+            return httpx.Response(200, json={"accessToken": "tok", "expireIn": 7200})
+        return httpx.Response(200, json={"nick": "张三"})
+
+    client, _ = _make_client(handler)
+    with pytest.raises(DingTalkError, match="unionId"):
+        await client.get_my_union_id()
+    await client.close()

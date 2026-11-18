@@ -14,9 +14,9 @@
 from collections.abc import Iterator
 from typing import Any
 
-from rag_core.dingding.client import DingTalkClient
-from rag_core.dingding.exceptions import DingTalkError
-from rag_core.dingding.models import (
+from dingding.client import DingTalkClient
+from dingding.exceptions import DingTalkError
+from dingding.models import (
     KIND_DOCUMENT,
     KIND_FOLDER,
     DingBlock,

@@ -13,7 +13,7 @@ from app.exception.llm_timeout import LLMTimeoutException
 from app.exception.not_found import NotFoundException
 from app.exception.parse import ParseException
 from app.exception.vector_store import VectorStoreException
-from rag_core.dingding.exceptions import DingTalkError
+from dingding.exceptions import DingTalkError
 
 ERROR_MAP: dict[type, tuple[str, int, str]] = {
     RequestValidationError: ("422001", 422, "数据验证错误"),
